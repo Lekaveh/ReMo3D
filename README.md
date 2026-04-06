@@ -1,33 +1,65 @@
-# ReMo3D
-ReMo3D is a Python package that allows to generate synthetic normal and lateral logs for complex 2D and 3D models. The package is built around a finite element mesh generator Gmsh and a high-performance multiphysics finite element software Netgen/NGSolve and supports distributed-memory parallel computation.
+﻿# ReMo3D
+
+ReMo3D is a Python package for generating synthetic normal and lateral
+resistivity logs in 2D axisymmetric and 3D dipping models. The workflow couples
+local mesh generation with finite-element solves and distributed-memory worker
+processes.
+
+## Documentation
+
+The main documentation entry point is [`docs/README.md`](docs/README.md).
+
+Key pages:
+
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/mathematical-foundations.md`](docs/mathematical-foundations.md)
+- [`docs/model-api.md`](docs/model-api.md)
+- [`docs/mesh-generation.md`](docs/mesh-generation.md)
+- [`docs/parallel-execution.md`](docs/parallel-execution.md)
+- [`docs/examples-and-tutorials.md`](docs/examples-and-tutorials.md)
 
 ## Installation
-The following software is required to use ReMo3D package:
-- MPI implementation (recommended Mpich for Linux and Microsoft MPI for Windows),
-- Gmsh,
-- Netgen/NGSolve,
-- Python 3.7 or above.
 
-After all prerequisites are succesufully installed run one of the following commands to install ReMo3D:
+The project README and source code indicate the following runtime stack:
 
-Linux:
-```
+- Python 3.7 or newer
+- MPI runtime
+- Gmsh
+- Netgen / NGSolve
+- optional NGSolve CUDA support for GPU workers
+
+The original project README recommends:
+
+- MPICH on Linux
+- Microsoft MPI on Windows
+
+Example install commands from the original project notes:
+
+### Linux
+
+```text
 pip3 install git+https://github.com/eMWu94/ReMo3D.git
 ```
 
-Windows:
-```
+### Windows
+
+```text
 pip install git+https://github.com/eMWu94/ReMo3D.git
 ```
 
-The package was tested on Ubuntu 18.04, Ubuntu 20.04, Windows 10 Pro and Windows 11 Pro.
+## Expected Computation Times
 
-## Expected computation times
-On a default settings simulation of 100 measurement points of a single logging tool on a PC equipped with AMD Ryzen 2600 CPU takes around 15-30 seconds in case of a 2D model of moderate complexity and around 15-30 minutes in case of a 3D model of moderate complexity.
+The original project notes state that simulating 100 measurement points for a
+single logging tool on a moderate 2D model takes roughly 15 to 30 seconds on an
+AMD Ryzen 2600 class CPU, while a moderate 3D model takes roughly 15 to 30
+minutes.
 
 ## Licensing Information
-The code in this repository is licensed under the GNU General Public License (GPL) v2.1. 
-The accompanying data (including but not limited to benchmark models, datasets, and other supporting materials) in this repository is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+- Code: GNU General Public License v2.1
+- Repository data and supporting materials: CC BY 4.0
 
 ## Funding
-The  research  was  funded  by  the  National  Science  Centre,  Poland,  grant  number  2020/37/N/ST10/03230.
+
+The research was funded by the National Science Centre, Poland, grant number
+2020/37/N/ST10/03230.
