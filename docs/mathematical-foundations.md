@@ -5,6 +5,14 @@
 ReMo3D solves the stationary current-flow equation for electric potential
 `u(x)` in a heterogeneous, isotropic conductivity field `sigma(x)`:
 
+$$
+\begin{aligned}
+-\nabla \cdot (\sigma \nabla u) &= \sum_k I_k \, \delta(\mathbf{x} - \mathbf{x}_k) && \text{in } \Omega \\
+u &= 0 && \text{on } \Gamma_D \\
+\sigma \nabla u \cdot \mathbf{n} &= 0 && \text{on } \Gamma_N
+\end{aligned}
+$$
+
 ```text
 -div(sigma grad u) = sum_k I_k delta(x - x_k)   in Omega
 u = 0                                            on Gamma_D
@@ -20,6 +28,10 @@ with:
 - `x_k`: current-electrode locations on the borehole axis
 
 The code uses conductivity rather than resistivity:
+
+$$
+\sigma = \frac{1}{\rho}
+$$
 
 ```text
 sigma = 1 / rho
@@ -37,11 +49,20 @@ borehole axis. The 3D PDE is reduced to a 2D meridional cross-section with:
 
 Under the assumption of no azimuthal dependence,
 
+$$
+dV = r \, dr \, d\theta \, dz
+$$
+
 ```text
 dV = r dr dtheta dz
 ```
 
 so integrating over `theta in [0, 2pi]` gives the weak form:
+
+$$
+\int_{\Omega_{2D}} 2 \pi r \, \sigma \, \nabla u \cdot \nabla v \, dr \, dz
+= \sum_k I_k \, v(0, z_k)
+$$
 
 ```text
 Integral_Omega2D 2 pi r sigma grad u . grad v dr dz = sum_k I_k v(0, z_k)
@@ -60,6 +81,10 @@ azimuthal measure.
 
 When `dip != 0`, cylindrical symmetry is lost and the code switches to a 3D
 half-space mesh. The weak form becomes:
+
+$$
+\int_{\Omega_{3D}} \sigma \, \nabla u \cdot \nabla v \, dV = \sum_k I_k \, v(\mathbf{x}_k)
+$$
 
 ```text
 Integral_Omega3D sigma grad u . grad v dV = sum_k I_k v(x_k)
@@ -93,6 +118,10 @@ for d, s in zip(dnums, shape):
 
 Mathematically this approximates the load functional:
 
+$$
+\ell(v) = \sum_k I_k \, v(\mathbf{x}_k)
+$$
+
 ```text
 ell(v) = sum_k I_k v(x_k)
 ```
@@ -105,6 +134,10 @@ Physically, each point source is a current injection or extraction electrode.
 
 The outer boundary of the local domain is fixed to zero potential:
 
+$$
+u = 0 \quad \text{on } \Gamma_D
+$$
+
 ```text
 u = 0 on Gamma_D
 ```
@@ -115,6 +148,10 @@ boundary far from the electrodes and conductivity contrasts.
 ### Neumann boundary
 
 All remaining boundaries are natural boundaries in the weak form:
+
+$$
+\sigma \nabla u \cdot \mathbf{n} = 0 \quad \text{on } \Gamma_N
+$$
 
 ```text
 sigma grad u . n = 0 on Gamma_N
@@ -133,6 +170,10 @@ piecewise-constant conductivity field `sigma`.
 
 The code uses the point-source potential in a homogeneous medium:
 
+$$
+V(r) = \frac{\rho}{4 \pi r}
+$$
+
 ```text
 V(r) = rho / (4 pi r)
 ```
@@ -141,17 +182,29 @@ V(r) = rho / (4 pi r)
 
 If the active current electrode is `A`, then:
 
+$$
+V(M) - V(N) = \frac{\rho}{4 \pi} \left(\frac{1}{AM} - \frac{1}{AN}\right)
+$$
+
 ```text
 V(M) - V(N) = rho / (4 pi) * (1/AM - 1/AN)
 ```
 
 so:
 
+$$
+\rho = \frac{4 \pi \, AM \, AN}{AN - AM} \, (V(M) - V(N))
+$$
+
 ```text
 rho = 4 pi AM AN / (AN - AM) * (V(M) - V(N))
 ```
 
 This is the formula used when `B` is missing. The `A`/`B`-symmetric case is:
+
+$$
+\rho = \frac{4 \pi \, BM \, BN}{BN - BM} \, (V(M) - V(N))
+$$
 
 ```text
 rho = 4 pi BM BN / (BN - BM) * (V(M) - V(N))
@@ -161,17 +214,29 @@ rho = 4 pi BM BN / (BN - BM) * (V(M) - V(N))
 
 For a measurement at `N` with current electrodes `A` and `B`:
 
+$$
+V(N) = \frac{\rho}{4 \pi} \left(\frac{1}{AN} - \frac{1}{BN}\right)
+$$
+
 ```text
 V(N) = rho / (4 pi) * (1/AN - 1/BN)
 ```
 
 so:
 
+$$
+\rho = \frac{4 \pi \, AN \, BN}{AN - BN} \, V(N)
+$$
+
 ```text
 rho = 4 pi AN BN / (AN - BN) * V(N)
 ```
 
 Likewise, for a single measurement electrode `M`:
+
+$$
+\rho = \frac{4 \pi \, AM \, BM}{BM - AM} \, V(M)
+$$
 
 ```text
 rho = 4 pi AM BM / (BM - AM) * V(M)
@@ -194,6 +259,13 @@ apparent resistivity.
 For every finished solve, the worker evaluates the potential at the measuring
 locations and multiplies by the geometric factor:
 
+$$
+\begin{aligned}
+\rho_a &= K \, |u(M) - u(N)| && \text{for two potential electrodes} \\
+\rho_a &= K \, |u(M)| && \text{for one potential electrode}
+\end{aligned}
+$$
+
 ```text
 rho_a = K * |u(M) - u(N)|     for two potential electrodes
 rho_a = K * |u(M)|            for one potential electrode
@@ -215,12 +287,35 @@ global conjugate-gradient solve.
 
 With a block partition:
 
+$$
+\begin{bmatrix}
+A_{EE} & A_{EI} \\
+A_{IE} & A_{II}
+\end{bmatrix}
+\begin{bmatrix}
+u_E \\
+u_I
+\end{bmatrix}
+=
+\begin{bmatrix}
+f_E \\
+f_I
+\end{bmatrix}
+$$
+
 ```text
 [A_EE  A_EI] [u_E] = [f_E]
 [A_IE  A_II] [u_I]   [f_I]
 ```
 
 the reduced system is the Schur complement in the exposed unknowns:
+
+$$
+\begin{aligned}
+S u_E &= f_E - A_{EI} A_{II}^{-1} f_I \\
+S &= A_{EE} - A_{EI} A_{II}^{-1} A_{IE}
+\end{aligned}
+$$
 
 ```text
 S u_E = f_E - A_EI A_II^-1 f_I
