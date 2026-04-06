@@ -98,3 +98,7 @@ The README states that the package was tested on:
   solver path also needs Netgen and NGSolve
 - GPU acceleration adds another layer of platform-specific setup and is best
   treated as optional rather than assumed
+## See Also
+- [README.md](README.md): top-level project summary and entry points.
+- [examples-and-tutorials.md](examples-and-tutorials.md#143-quick-start-with-inline-arrays): quick way to validate the environment once dependencies are installed.
+- [parallel-execution.md](parallel-execution.md#72-mpi-communication-protocol): MPI behavior that depends on the runtime environment.

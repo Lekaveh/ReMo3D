@@ -371,3 +371,7 @@ where zero Dirichlet data at the outer boundary remain a good approximation.
 
 The master warns when any electrode lies beyond `0.75 * domain_radius` and
 aborts when any electrode is outside the domain at all.
+## See Also
+- [solver.md](solver.md#62-solvebvp-cpu-version): where the documented weak forms are assembled in code.
+- [model-api.md](model-api.md#34-_set_tool_parameters): how geometric factors and depth shifts are derived from tool strings.
+- [mesh-generation.md](mesh-generation.md#47-mesh-size-control-strategy): geometry and refinement choices that affect the PDE solve.

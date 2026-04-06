@@ -275,3 +275,7 @@ These region indices map directly to the conductivity list returned by
 
 Use Netgen for the default axisymmetric workflow. Use Gmsh when the geometry is
 3D or when the Gmsh boolean construction is explicitly desired.
+## See Also
+- [walkthroughs.md](walkthroughs.md#112-netgen-2d-mesh-construction-walkthrough): worked geometry traces for the same algorithms.
+- [configuration.md](configuration.md#98-internal-geometry-window-and-meshing-knobs): hardcoded meshing defaults and developer tuning notes.
+- [solver.md](solver.md#68-mesh-quality-and-solver-performance): why mesh choices affect linear-solver behavior.

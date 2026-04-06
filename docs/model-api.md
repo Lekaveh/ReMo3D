@@ -438,3 +438,7 @@ but the current implementation does not forward them into
 the file, and direct-array setup still works if arrays are already in meters,
 but the wrapper signature currently advertises more configurability than it
 actually applies.
+## See Also
+- [rchitecture.md](architecture.md#12-data-flow): high-level control flow behind the methods on Model.
+- [data-structures.md](data-structures.md#126-task-list-structure): exact array and nested-list layouts returned by helper methods.
+- [parallel-execution.md](parallel-execution.md#72-mpi-communication-protocol): worker communication details used by simulate_logs.

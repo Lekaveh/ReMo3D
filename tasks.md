@@ -190,3 +190,53 @@ This task list covers the creation of complete, developer- and mathematician-ori
 - [x] **17.1** Document the coding conventions used in the project: variable naming patterns, array indexing conventions, coordinate system conventions (z = depth along borehole axis, r = radial distance; sign conventions for z in local coordinate frames).
 - [x] **17.2** Document the coordinate system in detail: in 2D models, x = radial distance, y = depth (z-axis); in 3D models, z = borehole axis; how simulation depths are shifted to local coordinates (centered at the simulation point).
 - [x] **17.3** Document error handling patterns: which functions raise `ValueError`, what conditions trigger errors, and the generic `try/except` in the worker that silently converts errors to NaN results.
+
+---
+
+## 18. Documentation Quality Improvements
+
+### 18.1 Expand Walkthroughs with Detailed Diagrams and Step-by-Step Traces
+
+- [x] **18.1.1** Expand the Netgen 2D mesh construction walkthrough (11.2) with detailed ASCII or Mermaid diagrams showing the geometric construction: how points at the borehole axis, borehole wall, filtration boundaries, layer endpoints, and domain boundary are laid out spatially, how lines connect them, and how region indices are assigned. The current 10-item bullet list is insufficient for the most complex algorithm in the codebase (~200 lines of point/line bookkeeping).
+- [x] **18.1.2** Expand the Gmsh 2D walkthrough (11.3) with a concrete worked example: show the OCC boolean operations (intersect, cut) on a small 2-layer model with one filtration zone, listing the intermediate surface tags after each operation.
+- [x] **18.1.3** Expand the Gmsh 3D walkthrough (11.4) with diagrams showing the half-sphere domain, the revolved borehole template, the rotated box for a dipping layer, and the cylinder intersection for filtration zones.
+- [x] **18.1.4** Expand the complete 2D simulation walkthrough (11.1) with concrete intermediate data: show the actual `tool_parameters` array for one of the Example_01 tools, the shape of `simulation_depths` and `task_list` for a small subset, and a trace of one worker's mesh-solve-evaluate cycle with actual numbers.
+- [x] **18.1.5** Expand the `_prepare_simulation_depths_and_tasks` walkthrough (11.5) with a worked example: take 3 tools and 10 measurement depths, show the simulation depths array, batching, offset computation, and the resulting nested task structure with actual indices.
+
+### 18.2 Developer Guide - Add Code Examples and Skeleton Implementations
+
+- [x] **18.2.1** Add a skeleton implementation to the "adding a new mesh generator" guide (10.2): write a template module with stub `SelectDataRange` and `ConstructModel` functions, show the required signature and return types, and show the exact lines to modify in `worker.py` and `simulate_logs`.
+- [x] **18.2.2** Add a code example to the "modifying the PDE" guide (10.3): show a concrete example of adding anisotropic conductivity (tensor sigma) to the bilinear form, with before/after code snippets for both CPU and GPU solver files.
+- [x] **18.2.3** Add a code example to the "adding new boundary conditions" guide (10.4): show how to add a Robin boundary condition (e.g., `a += alpha*u*v*ds("robin_boundary")`) with the mesh generator changes needed to create the boundary label.
+- [x] **18.2.4** Add a code example to the "modifying the solver" guide (10.5): show how to switch from CG to a direct solver (`ngs.directsolve`), how to change the element order, and how to add a convergence check.
+- [x] **18.2.5** Add a code example to the "extending parallel execution" guide (10.6): show how to add a new broadcasted parameter (e.g., a new solver option) end-to-end from `simulate_logs` through `worker.py`.
+- [x] **18.2.6** Add a worked example to the "inversion integration" guide (10.8): show a minimal inversion loop using `initialize_workers`/`simulate_logs`/`shutdown_workers` with a simple objective function.
+
+### 18.3 Solver Documentation - Expand Depth
+
+- [x] **18.3.1** Document CG solver convergence behavior: what happens when the solver reaches the 1000-iteration limit without converging, how to detect this situation, and what it implies for the result quality.
+- [x] **18.3.2** Add a troubleshooting section for solver failures: common causes (degenerate mesh elements, extreme conductivity contrasts, point source on element boundary), diagnostic steps, and recommended parameter adjustments.
+- [x] **18.3.3** Document the interaction between mesh quality and solver performance: how mesh refinement near electrodes affects CG convergence, and how the mesh size fields in the Gmsh/Netgen generators are tuned for the solver.
+
+### 18.4 Testing & Validation - Reference Actual Benchmark Models
+
+- [x] **18.4.1** Document Benchmark Model 1 (`Benchmark model 1/`): describe the formation and borehole configuration in `Formation_BM1.txt` and `Borehole_BM1.txt`, state the expected results, and explain what physical scenario it validates.
+- [x] **18.4.2** Document Benchmark Model 2 (`Benchmark model 2/`): describe the formation and borehole configuration, expected results, and validation purpose.
+- [x] **18.4.3** Document Benchmark Model 3 (`Benchmark model 3/`): describe the formation configurations for all dip angles (0, 15, 30, 45, 60 degrees in `Formation_BM3_*.txt`), expected results, and how they validate the 3D solver.
+- [x] **18.4.4** Document the Thin-bedded model (`Thin-bedded model/`): describe the two formation models, three borehole models (correct/high/low mud resistivity), the four sets of computed logs, and the `Logs_depth_shifts.txt` file. Explain what thin-bed effects this model is designed to test.
+
+### 18.5 Examples & Tutorials - Include Runnable Code
+
+- [x] **18.5.1** Include the full annotated source code of Example_01 in the tutorial, with line-by-line commentary explaining each parameter choice and the expected output files.
+- [x] **18.5.2** Include the full annotated source code of Example_02 in the tutorial, with commentary on each optional parameter and how it changes behavior compared to Example_01.
+- [x] **18.5.3** Add a "quick start" code snippet that can be copy-pasted to run a minimal simulation with inline model arrays (no external files needed).
+
+### 18.6 Cross-Referencing Between Documents
+
+- [x] **18.6.1** Add cross-reference links throughout the documentation: solver docs should link to mathematical foundations for formulation derivations, developer guide should link to architecture for module locations, walkthroughs should link to data structures for array layouts, etc.
+- [x] **18.6.2** Add a "See Also" section at the end of each document listing related documents and the specific sections that provide context.
+
+### 18.7 Missing Configuration Parameters
+
+- [x] **18.7.1** Document the `active_geometry_window` parameter: its role in preventing thin slivers at domain edges, default values (0.999 for Netgen, 0.99 for Gmsh), how it affects which formation features are included in the local mesh, and when a developer might need to adjust it.
+- [x] **18.7.2** Document internal mesh parameters that are currently hardcoded: `mesh_size_min` (0.001), `mesh_size_max` (10), `mesh_density` ("moderate") in the Netgen builder, the Gmsh mesh algorithm choices (algorithm 6 for 2D, algorithm 5 for 3D), and guidance on when/how to modify them.

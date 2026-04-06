@@ -137,3 +137,7 @@ Configurable visual parameters:
 
 The output format is intentionally simple and human-readable rather than LAS or
 DLIS.
+## See Also
+- [model-api.md](model-api.md#315-save_results): the method that reads and writes these formats.
+- [examples-and-tutorials.md](examples-and-tutorials.md#141-tutorial-from-example_01): example usage that produces the documented output files.
+- [data-structures.md](data-structures.md#127-logs): in-memory form of the same output data.

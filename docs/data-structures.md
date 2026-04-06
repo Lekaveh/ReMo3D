@@ -224,3 +224,7 @@ sigma = ngs.CoefficientFunction(sigma)
 
 so the FEM bilinear form can evaluate the correct piecewise-constant
 conductivity per region.
+## See Also
+- [model-api.md](model-api.md#312-_prepare_simulation_depths_and_tasks): where the nested task structures are built.
+- [walkthroughs.md](walkthroughs.md#115-_prepare_simulation_depths_and_tasks-walkthrough): worked example showing these arrays with real indices.
+- [parallel-execution.md](parallel-execution.md#74-per-task-worker-pipeline): how the worker consumes the documented structures.

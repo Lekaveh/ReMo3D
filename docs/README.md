@@ -26,3 +26,7 @@ The format is topic-based Markdown with Mermaid diagrams where structure matters
 - The docs describe the repository as it exists now.
 - Sharp edges in the current implementation are documented explicitly.
 - Section numbering in the pages follows the checklist numbering in `tasks.md`.
+## See Also
+- [rchitecture.md](architecture.md#11-overall-structure): package layout and control flow.
+- [model-api.md](model-api.md#32-modelcompute_synthetic_logs): the main public workflow.
+- [examples-and-tutorials.md](examples-and-tutorials.md#143-quick-start-with-inline-arrays): fastest path to a runnable example.

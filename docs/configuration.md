@@ -1,5 +1,9 @@
 ﻿# Configuration and Parameters
 
+This page covers both the public runtime knobs and the important internal mesh
+controls that developers may need to adjust. For the implementation details
+behind the meshing defaults, see [`mesh-generation.md`](mesh-generation.md).
+
 ## 9.1 `compute_synthetic_logs` Parameter Reference
 
 | Parameter | Type | Default | Allowed values | Meaning | Effect on results / performance |
@@ -131,3 +135,95 @@ If that fails, the code prints a warning and resets `gpu_workers` to zero.
 - Mixed CPU and GPU configurations are supported by the worker protocol.
 - Memory use grows with worker count because every worker receives the broadcast
   model data and creates its own local meshes and FE objects.
+
+## 9.8 Internal Geometry Window and Meshing Knobs
+
+These are not exposed as public API parameters today, but they are important
+internal controls if you are modifying the mesh backends.
+
+### `active_geometry_window`
+
+Where it appears:
+
+- `SelectNetgenDataRange(..., active_geometry_window=0.999)`
+- `SelectGmshFormationDataRange(..., active_geometry_window=0.99)`
+- `SelectGmshDataRange(..., active_geometry_window=0.99)`
+
+Role:
+
+- slightly shrinks the effective geometry-selection radius relative to the full
+  `domain_radius`
+- prevents extremely thin slivers and tiny wedges at the edge of the local
+  domain
+- decides whether marginal formation features are kept or dropped from the local
+  mesh
+
+Practical effect:
+
+- larger values closer to `1.0` keep more edge geometry but risk tiny edge
+  regions
+- smaller values are more conservative and can remove geometry that would only
+  barely touch the domain
+
+When to adjust it:
+
+- if a custom model produces many edge slivers during meshing
+- if a feature near the domain edge is physically important and is being clipped
+  too aggressively
+- when experimenting with new mesh backends or more pathological geometries
+
+### Hardcoded Netgen mesh controls
+
+The Netgen builder currently hardcodes:
+
+```text
+mesh_size_min = 0.001
+mesh_size_max = 10
+mesh_density = "moderate"
+```
+
+Meaning:
+
+- `mesh_size_min`: minimum local size near current-electrode source points
+- `mesh_size_max`: upper bound for generated element size
+- `mesh_density`: preset passed into `SplineGeometry.GenerateMesh`
+
+When to adjust them:
+
+- reduce `mesh_size_min` if the source zone is still too coarse
+- reduce `mesh_size_max` if the far field is too coarse for your accuracy needs
+- increase `mesh_size_max` only when you have evidence the far field is over-
+  resolved and runtime matters more than conservative accuracy
+
+### Hardcoded Gmsh algorithm choices
+
+The Gmsh builders currently hardcode:
+
+- algorithm `6` for 2D meshes
+- algorithm `5` for 3D meshes
+
+These are selected through:
+
+```python
+gmsh.option.setNumber("Mesh.Algorithm", 6)  # 2D
+gmsh.option.setNumber("Mesh.Algorithm", 5)  # 3D
+```
+
+When to adjust them:
+
+- if a geometry repeatedly fails in one meshing algorithm but succeeds in
+  another
+- if you are benchmarking alternative Gmsh meshing strategies for speed or
+  robustness
+- when you introduce new geometry types that behave poorly under the current
+  defaults
+
+Any change here should be validated against the benchmark models before being
+kept as a new default.
+
+## See Also
+
+- [`mesh-generation.md`](mesh-generation.md#41-selectgmshboreholedatarange): where the internal geometry-window and mesh-size decisions are applied.
+- [`solver.md`](solver.md#66-cg-convergence-behavior): how these runtime settings ultimately affect solve behavior.
+- [`model-api.md`](model-api.md#314-simulate_logs): the master-side method that consumes the public parameters.
+- [`testing-and-validation.md`](testing-and-validation.md#152-creating-new-validation-tests): how to validate any tuning change against reference cases.

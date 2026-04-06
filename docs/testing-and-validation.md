@@ -1,5 +1,9 @@
 ﻿# Testing and Validation
 
+This page focuses on the benchmark assets shipped in the repository. For the
+example-driven usage narrative, see
+[`examples-and-tutorials.md`](examples-and-tutorials.md#146-benchmark-models).
+
 ## 15.1 Existing Benchmark Models and Expected Behavior
 
 The repository ships benchmark inputs and, in some cases, sample outputs. The
@@ -8,38 +12,164 @@ cases rather than full analytical truth tables.
 
 ### Benchmark model 1
 
-Expected behavior:
+Files:
 
-- symmetric layer-boundary response in a non-invaded layered medium
-- sensitivity mainly to the vertical placement of the tool relative to the
-  10/100 ohm-m interfaces
+- `Examples/Benchmark models/Benchmark model 1/Formation_BM1.txt`
+- `Examples/Benchmark models/Benchmark model 1/Borehole_BM1.txt`
+
+Configuration:
+
+- constant borehole diameter: `200 mm`
+- constant mud resistivity: `1 ohm-m`
+- 9 formation layers from `0 m` to `60 m`
+- alternating resistivities of `10 ohm-m` and `100 ohm-m`
+- no filtration zones anywhere in the model
+
+Layer sequence:
+
+```text
+0.0-7.5    10 ohm-m
+7.5-8.5   100 ohm-m
+8.5-18.5   10 ohm-m
+18.5-20.5 100 ohm-m
+20.5-30.5  10 ohm-m
+30.5-34.5 100 ohm-m
+34.5-44.5  10 ohm-m
+44.5-52.5 100 ohm-m
+52.5-60.0  10 ohm-m
+```
+
+Validation purpose:
+
+- clean layer-boundary response in a non-invaded medium
+- baseline check that the solver, tool geometry, and post-processing detect thin
+  resistive beds embedded in a conductive background
+
+Expected results:
+
+- symmetric responses around each layer boundary for symmetric tools
+- stronger anomalies at the thin `100 ohm-m` beds than in the thick `10 ohm-m`
+  intervals
+- no invasion-related shoulder effects because no filtration zones are present
 
 ### Benchmark model 2
 
-Expected behavior:
+Files:
 
-- clear distinction between invaded and undisturbed zones
-- sensitivity to the filtration-zone radius and resistivity
+- `Examples/Benchmark models/Benchmark model 2/Formation_BM2.txt`
+- `Examples/Benchmark models/Benchmark model 2/Borehole_BM2.txt`
+
+Configuration:
+
+- constant borehole diameter: `200 mm`
+- constant mud resistivity: `1 ohm-m`
+- 7 layers from `0 m` to `60 m`
+- background alternating between `10 ohm-m` and `100 ohm-m`
+- invaded layers at `5-15 m`, `25-35 m`, and `45-55 m`
+- filtration-zone radii: `0.2 m`, `0.35 m`, and `0.5 m`
+- filtration-zone resistivity: `5 ohm-m` in each invaded layer
+
+Validation purpose:
+
+- check filtration-zone handling
+- verify that the local region numbering and conductivity ordering for invaded
+  and undisturbed regions are correct
+- confirm that larger invaded radii create a broader near-well influence on the
+  apparent logs
+
+Expected results:
+
+- clear separation between invaded-zone response and undisturbed-zone response
+- broader anomalies in the deeper invaded layers because the filtration radius
+  grows from `0.2 m` to `0.5 m`
 
 ### Benchmark model 3
 
-Expected behavior:
+Files:
 
-- matches the undipped behavior at `0` degrees
-- increasingly 3D responses as the dip angle rises through `15`, `30`, `45`,
-  and `60` degrees
+- `Examples/Benchmark models/Benchmark model 3/Borehole_BM3.txt`
+- `Examples/Benchmark models/Benchmark model 3/Formation_BM3_00.txt`
+- `Examples/Benchmark models/Benchmark model 3/Formation_BM3_15.txt`
+- `Examples/Benchmark models/Benchmark model 3/Formation_BM3_30.txt`
+- `Examples/Benchmark models/Benchmark model 3/Formation_BM3_45.txt`
+- `Examples/Benchmark models/Benchmark model 3/Formation_BM3_60.txt`
+
+Configuration:
+
+- constant borehole diameter: `200 mm`
+- constant mud resistivity: `1 ohm-m`
+- three-layer model from `0 m` to `25 m`
+- resistivity sequence: `10 ohm-m`, `100 ohm-m`, `10 ohm-m`
+- no filtration zones
+
+Dip-angle-specific layer boundaries:
+
+```text
+0 deg  -> 11.00-14.00 m middle layer
+15 deg -> 10.95-14.05 m middle layer
+30 deg -> 10.77-14.23 m middle layer
+45 deg -> 10.38-14.62 m middle layer
+60 deg ->  9.50-15.50 m middle layer
+```
+
+Validation purpose:
+
+- verify the transition from the axisymmetric formulation to the full 3D solve
+- confirm that the Gmsh 3D meshing and the 3D weak form respond consistently as
+  dip increases
+
+Expected results:
+
+- the `0 deg` model should act as the reference case closest to the 2D behavior
+- increasing dip should broaden and shift the apparent boundary response because
+  the tool interacts with a geometrically tilted interface
 
 ### Thin-bedded model
 
-Expected behavior:
+Files:
 
-- strong sensitivity to thin layering
-- visible impact of depth misalignment and boundary effects, as documented in
-  `Logs 1` through `Logs 4`
+- formation models:
+  - `Formation_model_1.txt`
+  - `Formation_model_2.txt`
+- borehole models:
+  - `Borehole_model_correct_rm.txt`
+  - `Borehole_model_high_rm.txt`
+  - `Borehole_model_low_rm.txt`
+- output folders:
+  - `Logs 1`
+  - `Logs 2`
+  - `Logs 3`
+  - `Logs 4`
+- depth-shift table:
+  - `Logs_depth_shifts.txt`
 
-The repository does not include a separate analytical-results table, so the
-sample benchmark inputs and stored result files act as the main in-repo
-reference set.
+Configuration summary from the repository README for this benchmark:
+
+- thin-bed layering generated by perturbing interval boundaries around a
+  `0.25 m` logging step
+- two formation realizations
+- constant borehole diameter `0.2 m`
+- mud resistivity variants: `0.2`, `0.35`, and `0.5 ohm-m`
+
+What the four log sets mean:
+
+- `Logs 1`: unaffected by boundary effects and depth misalignment
+- `Logs 2`: affected only by boundary effects
+- `Logs 3`: affected only by measurement-depth misalignment
+- `Logs 4`: affected by both effects
+
+What `Logs_depth_shifts.txt` adds:
+
+- true measurement depth
+- shifted depth assigned to the measurement
+- the signed depth shift itself
+
+Validation purpose:
+
+- quantify thin-bed sensitivity
+- show how depth misalignment alone can distort resistivity logs
+- show how boundary effects and incorrect mud resistivity alter the response in
+  tightly layered models
 
 ## 15.2 Creating New Validation Tests
 
@@ -61,6 +191,13 @@ Good validation targets:
 - the same 2D model with `batch_size=1` and a larger batch size to quantify
   batching error
 
+A practical staged validation path is:
+
+1. benchmark model 1 for clean layer transitions
+2. benchmark model 2 for invasion-zone handling
+3. benchmark model 3 for 3D dip behavior
+4. thin-bedded model for depth-assignment and thin-bed sensitivity
+
 ## 15.3 Known Limitations and Edge Cases
 
 The current code has several practical limits worth documenting:
@@ -76,3 +213,10 @@ The current code has several practical limits worth documenting:
   the run alive but can hide the first failure mode
 - 3D runs are much more expensive than 2D axisymmetric runs and may require a
   denser borehole path, larger memory budget, and more conservative settings
+
+## See Also
+
+- [`examples-and-tutorials.md`](examples-and-tutorials.md#146-benchmark-models): usage-oriented descriptions of the same benchmark assets.
+- [`solver.md`](solver.md#67-troubleshooting-solver-failures): solver-side failure modes that can surface during validation.
+- [`configuration.md`](configuration.md#92-domain_radius): runtime parameters that most strongly affect benchmark reproducibility.
+- [`history-and-conventions.md`](history-and-conventions.md#173-error-handling-patterns): why some benchmark failures appear as `NaN` instead of raised exceptions.

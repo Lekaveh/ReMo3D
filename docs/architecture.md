@@ -118,3 +118,7 @@ flowchart TD
 | batch mode | Grouping adjacent simulation depths into one worker task. |
 | simulation depth | Depth at which the PDE is solved after applying a tool-specific depth shift. |
 | measurement depth | Depth attached to the final log sample written to `self.logs`. |
+## See Also
+- [model-api.md](model-api.md#31-model__init__): how the architecture is exposed through the public API.
+- [parallel-execution.md](parallel-execution.md#71-worker-process-lifecycle): the worker-side view of the same control flow.
+- [mesh-generation.md](mesh-generation.md#4-mesh-generation---gmsh-gmsh_functionspy): geometry backends referenced in the module graph.

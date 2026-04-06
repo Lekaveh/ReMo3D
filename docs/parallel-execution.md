@@ -180,3 +180,7 @@ sequenceDiagram
     M->>W: StopIteration
     W->>W: Disconnect
 ```
+## See Also
+- [model-api.md](model-api.md#314-simulate_logs): master-side orchestration that feeds the worker loop.
+- [walkthroughs.md](walkthroughs.md#116-master-worker-communication-walkthrough): step-by-step trace of the message flow.
+- [solver.md](solver.md#67-troubleshooting-solver-failures): downstream effects when a worker-side solve fails.
