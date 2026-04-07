@@ -16,6 +16,7 @@ Key pages:
 - [`docs/model-api.md`](docs/model-api.md)
 - [`docs/mesh-generation.md`](docs/mesh-generation.md)
 - [`docs/parallel-execution.md`](docs/parallel-execution.md)
+- [`docs/performance-guide.md`](docs/performance-guide.md)
 - [`docs/examples-and-tutorials.md`](docs/examples-and-tutorials.md)
 
 ## Installation
@@ -49,10 +50,10 @@ pip install git+https://github.com/eMWu94/ReMo3D.git
 
 ## Expected Computation Times
 
-The original project notes state that simulating 100 measurement points for a
-single logging tool on a moderate 2D model takes roughly 15 to 30 seconds on an
-AMD Ryzen 2600 class CPU, while a moderate 3D model takes roughly 15 to 30
-minutes.
+The original project notes state that simulating `100` measurement points for a
+single logging tool on a moderate 2D model takes roughly `15-30 seconds` on an
+AMD Ryzen 2600 class CPU, while a moderate 3D model takes roughly
+`15-30 minutes`.
 
 ## Licensing Information
 

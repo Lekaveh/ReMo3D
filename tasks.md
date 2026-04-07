@@ -240,3 +240,63 @@ This task list covers the creation of complete, developer- and mathematician-ori
 
 - [x] **18.7.1** Document the `active_geometry_window` parameter: its role in preventing thin slivers at domain edges, default values (0.999 for Netgen, 0.99 for Gmsh), how it affects which formation features are included in the local mesh, and when a developer might need to adjust it.
 - [x] **18.7.2** Document internal mesh parameters that are currently hardcoded: `mesh_size_min` (0.001), `mesh_size_max` (10), `mesh_density` ("moderate") in the Netgen builder, the Gmsh mesh algorithm choices (algorithm 6 for 2D, algorithm 5 for 3D), and guidance on when/how to modify them.
+
+---
+
+## 19. Performance & Optimization Guide (`docs/performance-guide.md`)
+
+A standalone document covering all aspects of performance tuning, CPU/GPU usage, and parameter impact on speed and accuracy.
+
+### 19.1 CPU Parallelism
+
+- [x] **19.1.1** Explain the MPI-based parallelism model: the master process does no computation, all mesh generation and FEM solving happens in worker processes. Document that `cpu_workers=N` spawns N worker processes, so on a machine with P physical cores the effective concurrency is `min(N, P-1)` since the master also occupies a core.
+- [x] **19.1.2** Provide scaling guidelines: how simulation time scales with `cpu_workers` (near-linear up to core count, then diminishing returns), the overhead of MPI spawning and data broadcast, and how to measure the sweet spot for a given machine.
+- [x] **19.1.3** Document the dynamic load balancing mechanism: workers pull tasks on demand, so slower tasks (complex meshes, more CG iterations) don't block faster ones. Explain why this is better than static task distribution and when it matters (heterogeneous task complexity, mixed CPU/GPU).
+- [x] **19.1.4** Document memory considerations: each worker holds a full copy of the broadcasted model data plus its own local mesh and FEM matrices. Provide rough memory estimates per worker for typical 2D and 3D models, and guidance on when memory becomes the bottleneck before CPU count.
+
+### 19.2 GPU Acceleration
+
+- [x] **19.2.1** Explain when GPU acceleration helps: the GPU path offloads the CG solve (matrix-vector products and preconditioner application) to CUDA. This benefits large 3D problems with many DOFs but may add overhead for small 2D problems where data transfer dominates.
+- [x] **19.2.2** Document how to configure GPU workers: set `gpu_workers=N` to dedicate N workers to GPU execution. Each GPU worker uses one GPU (or shares if multiple workers target the same device). Explain the interaction with `cpu_workers` — both types run simultaneously and pull from the same task queue.
+- [x] **19.2.3** Document GPU hardware requirements: CUDA-capable GPU, NGSolve built with CUDA support, the `ngsolve.ngscuda` import check, and what happens when CUDA is unavailable (automatic fallback to `gpu_workers=0` with a warning).
+- [x] **19.2.4** Provide CPU-vs-GPU decision guidance: for 2D axisymmetric models (typically small FEM systems), CPU is usually faster. For 3D dipping-layer models (large FEM systems), GPU can provide significant speedup. Include rough crossover points based on DOF count.
+- [x] **19.2.5** Document multi-GPU setups: how to assign different workers to different GPUs, current limitations (the code doesn't explicitly control GPU device assignment), and workarounds using `CUDA_VISIBLE_DEVICES` environment variable.
+
+### 19.3 Batch Size Tuning
+
+- [x] **19.3.1** Explain the batch mode mechanism in detail: `batch_size` adjacent measurement points are grouped, one average simulation depth is computed, the mesh is generated once for that depth, and individual measurements use offsets from the average. This avoids redundant mesh generation for nearby depths.
+- [x] **19.3.2** Document the accuracy-vs-speed trade-off: larger batch sizes mean each measurement uses a mesh centered at a slightly different depth than ideal. Quantify the offset error: for `batch_size=B` and depth step `dz`, the maximum offset is approximately `B*dz/2`. Explain when this matters (thin layers near electrode spacing, sharp resistivity contrasts).
+- [x] **19.3.3** Provide batch size recommendations: `batch_size=1` for maximum accuracy (no batching), `batch_size=5` (default) as a good compromise, `batch_size=10-20` for fast reconnaissance runs. Relate to measurement step size — a 0.1m step with batch_size=5 gives max offset of 0.25m.
+- [x] **19.3.4** Document the interaction between batch size and the single-electrode computation mode (SEC): when SEC is active, batching groups more tools per solve, compounding the speedup. Show example timing comparisons.
+
+### 19.4 Domain Radius Impact
+
+- [x] **19.4.1** Explain how `domain_radius` affects accuracy: the Dirichlet boundary condition (u=0) is an approximation valid only when the boundary is far from the electrodes. A domain that is too small introduces systematic error in the computed potential differences.
+- [x] **19.4.2** Provide domain radius guidelines: the domain should be at least 5-10x the largest electrode spacing. The default of 50m is generous for typical tools (spacings of 0.1-6m). Document the 75% warning threshold — if any electrode is beyond 75% of the domain radius, accuracy degrades.
+- [x] **19.4.3** Document the performance impact: larger domains mean more mesh elements and more DOFs, increasing both mesh generation and solve time. For 3D models, this scaling is cubic, making domain radius a critical performance parameter.
+
+### 19.5 Mesh Generator Choice
+
+- [x] **19.5.1** Compare Netgen vs Gmsh performance for 2D models: Netgen generates meshes faster (direct SplineGeometry, no file I/O), while Gmsh uses OCC boolean operations and writes/reads temporary `.msh` files. Quantify the typical overhead difference.
+- [x] **19.5.2** Document why Gmsh is the only option for 3D: Netgen's SplineGeometry is 2D-only, while Gmsh's OCC kernel supports 3D boolean operations needed for dipping layers and cylindrical filtration zones.
+- [x] **19.5.3** Document the temporary file overhead for Gmsh: meshes are written to `./tmp/` and read back via `ReadGmsh`. On slow filesystems this can become a bottleneck. Note that the `./tmp/` directory is cleaned up after simulation.
+
+### 19.6 Solver Parameters
+
+- [x] **19.6.1** Compare preconditioner performance: `"multigrid"` (default) provides mesh-size-independent convergence for elliptic problems and is the recommended choice. `"local"` (Jacobi/block-Jacobi) is simpler but iteration count grows with mesh refinement. Provide typical iteration count comparisons.
+- [x] **19.6.2** Document the impact of `condense=True` (static condensation): eliminates internal DOFs from the global system, reducing the system size by roughly 50-70% for order-3 elements. Always recommended unless debugging. Explain that it is mathematically equivalent to the non-condensed solve.
+- [x] **19.6.3** Document the CG solver's hardcoded `maxsteps=1000`: sufficient for well-conditioned 2D problems, may be tight for large 3D problems with local preconditioner. Explain how to detect if the limit is being hit (currently silent — the solver returns whatever it has at 1000 steps) and the implications for result quality.
+
+### 19.7 Single-Electrode Computation Mode (SEC)
+
+- [x] **19.7.1** Explain the SEC optimization in performance terms: when all tools share one current electrode configuration, ReMo3D generates one mesh and solves one BVP per simulation depth instead of one per tool. For N tools, this gives up to Nx speedup on the FEM solve portion.
+- [x] **19.7.2** Document `force_single_electrode_configuration=True` (default): how it converts dual-current-electrode tools (A+B) to equivalent single-current-electrode tools (M+N swapped) to enable SEC mode. Explain that this is mathematically exact — the converted tool produces identical results.
+- [x] **19.7.3** Document when SEC mode cannot be used: if any tool has a configuration that cannot be converted to single-electrode form, the entire simulation falls back to per-tool solves. List the tool patterns that break SEC.
+
+### 19.8 End-to-End Performance Profiles
+
+- [x] **19.8.1** Provide a time breakdown for a typical 2D simulation: what fraction of wall time is spent on task preparation, MPI communication, mesh generation, FEM assembly, CG solve, and result gathering. Identify which phase dominates (usually mesh generation + solve).
+- [x] **19.8.2** Provide a time breakdown for a typical 3D simulation: same phases but with 3D mesh generation and solve dominating. Note the README's stated times: 15-30 seconds for 2D (100 points), 15-30 minutes for 3D (100 points) on an AMD Ryzen 2600.
+- [x] **19.8.3** Create a decision flowchart: given model complexity (2D vs 3D, number of layers, number of tools, number of measurement points), recommend optimal settings for `cpu_workers`, `gpu_workers`, `batch_size`, `domain_radius`, `mesh_generator`, `preconditioner`, and `condense`.
+- [x] **19.8.4** Document performance anti-patterns: common mistakes that cause unnecessary slowdowns (e.g., `batch_size=1` with fine depth steps, excessive `domain_radius` for short-spacing tools, `cpu_workers` exceeding physical cores, using Gmsh for 2D when Netgen suffices).
+
