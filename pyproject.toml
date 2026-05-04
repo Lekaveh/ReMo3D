@@ -18,7 +18,7 @@ dependencies = [
     "matplotlib",
     "mpi4py",
     "gmsh",
-    "ngsolve>=6.2.2404",
+    "ngsolve"
 ]
 
 [project.urls]
