@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "remo3d"
+version = "1.4.0"
+description = "ReMo3D is a Python package for generating synthetic normal and lateral resistivity logs in 2D axisymmetric and 3D dipping models."
+readme = "README.md"
+requires-python = ">=3.7"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Michał Wilkosz", email = "michal.m.wilkosz@gmail.com" },
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "mpi4py",
+    "gmsh",
+]
+
+[project.urls]
+Homepage = "https://github.com/Lekaveh/ReMo3D"
+Repository = "https://github.com/Lekaveh/ReMo3D"
+
+[tool.setuptools.packages.find]
+include = ["remo3d*"]

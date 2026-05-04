@@ -48,6 +48,31 @@ pip3 install git+https://github.com/eMWu94/ReMo3D.git
 pip install git+https://github.com/eMWu94/ReMo3D.git
 ```
 
+### Using uv
+
+If you want to work from a local checkout of this repository with `uv`, install
+`uv`, clone the repository, then run:
+
+```text
+uv sync
+```
+
+This creates a project environment and installs ReMo3D from the local source in
+editable mode.
+
+To run code inside that environment:
+
+```text
+uv run python
+```
+
+If you want to install ReMo3D directly from GitHub with `uv` instead of
+checking out the repository first, run:
+
+```text
+uv pip install git+https://github.com/Lekaveh/ReMo3D.git
+```
+
 ## Expected Computation Times
 
 The original project notes state that simulating `100` measurement points for a
