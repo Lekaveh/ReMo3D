@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable, get_cmap
-from remo3d import Model
 
 ROOT = Path(__file__).resolve().parents[1]
-REMO3D_DIR = ROOT / "remo3d"
-if str(REMO3D_DIR) not in sys.path:
-    sys.path.insert(0, str(REMO3D_DIR))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from remo3d import Model
     
 # Specify input data
 #all_tools = ["B5.7A0.4M", "B4.48A1.62M", "M1.0A0.1B", "A2.0M0.5N", "N0.5M2.0A", "M4.0A0.5B"] # logging tools
