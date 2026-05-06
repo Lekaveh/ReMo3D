@@ -24,9 +24,14 @@ formation_model_file[:, 2:4] = np.nan
 borehole_model_file = "../notebooks/Input/Ex1/Borehole.txt" # path to file with borehole parameters
 measurement_depths = np.arange(0, 25.1, 0.1) # measurement points
 
+preconditioner = "multigrid"
+condense = True
+fe_order = 3
+
 # Create model and simulate logs
 model = Model.compute_synthetic_logs(all_tools, measurement_depths, formation_model_file, borehole_model_file, borehole_geometry_type='diameter', dip=0,
-                                     cpu_workers=20, gpu_workers=0, domain_radius=50, batch_size=5, mesh_generator='netgen')
+                                     cpu_workers=20, gpu_workers=0, domain_radius=50, batch_size=5, mesh_generator='netgen',
+                                     preconditioner=preconditioner, condense=condense, fe_order=fe_order)
 
 from pathlib import Path
 
