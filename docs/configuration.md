@@ -19,7 +19,7 @@ behind the meshing defaults, see [`mesh-generation.md`](mesh-generation.md).
 | `dip` | `float` | `0` | `0 <= dip < 90` | Layer dip angle in degrees | `0` enables 2D axisymmetry; nonzero dip forces 3D Gmsh and is much more expensive |
 | `cpu_workers` | `int` | `4` | `>= 1` | Number of CPU worker processes | More workers improve throughput until meshing/solve cost or memory dominates |
 | `gpu_workers` | `int` | `0` | `>= 0` | Number of GPU worker processes | Can accelerate large solves if CUDA-enabled NGSolve is available |
-| `domain_radius` | `float` | `50` | positive and larger than electrode offsets | Radius of the local computational domain | Larger is usually more accurate and slower |
+| `domain_radius` | `float` or `"auto"` | `50` | positive and larger than electrode offsets, or `"auto"` | Radius of the local computational domain | Larger is usually more accurate and slower; `"auto"` may be faster for short-spacing tools |
 | `batch_size` | `int` | `5` | positive integer | Number of adjacent simulation depths grouped into one batch | Larger batches reduce meshing cost but use one representative depth per batch |
 | `mesh_generator` | `str` | `"auto"` | `"auto"`, `"netgen"`, `"gmsh"` | Mesh backend selection | `netgen` is only for 2D; `gmsh` is required for 3D |
 | `preconditioner` | `str` | `"multigrid"` | `"local"`, `"multigrid"` | NGSolve preconditioner name | Affects CG convergence and setup cost |
@@ -38,12 +38,23 @@ Master-side checks:
 - if any electrode offset is outside the domain, the simulation aborts
 - if any electrode offset exceeds `0.75 * domain_radius`, a warning is printed
 
+Auto sizing:
+
+- `domain_radius="auto"` resolves before worker dispatch to
+  `max(10 * max_electrode_distance, 5.0)`
+- `max_electrode_distance` is the largest absolute electrode offset across all
+  configured tools
+- the resolved numeric radius is broadcast to workers, so mesh generation and
+  clipping still receive a number
+
 Practical guidance:
 
 - use the smallest radius that still keeps the Dirichlet boundary far from all
   current electrodes and the main resistivity contrasts
 - increase the radius for long-spacing tools, large invaded zones, or strong
   contrasts
+- validate `"auto"` against a fixed-radius reference for models with large
+  invasion zones, thin beds, or large batch sizes
 - expect both meshing and FEM cost to grow as the local domain grows
 
 ## 9.3 `batch_size`

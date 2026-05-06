@@ -215,6 +215,11 @@ To compare finite-element orders for Task 4, run the same harness with
 `--fe-order 2` and `--fe-order 3`, then compare DOF counts, timings, and
 apparent resistivity values in the JSON outputs.
 
+For adaptive domain-radius validation, compare production or benchmark runs with
+the fixed default `domain_radius=50` against the opt-in
+`domain_radius="auto"`. Treat any `NaN`, boundary artifact, or material-response
+shift outside the project tolerance as a failed optimization for that model.
+
 The harness runs two small 2D reference cases:
 
 - `homogeneous_10ohmm`: homogeneous mud and formation at `10 ohm-m`; the

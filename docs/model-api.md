@@ -326,6 +326,8 @@ Interpolation rules:
 ### Input preparation
 
 - validate `domain_radius` against every electrode offset
+- resolve `domain_radius="auto"` to a numeric radius before validation and
+  worker broadcast
 - choose the mesh backend:
   - `auto -> netgen` for `dip == 0`
   - `auto -> gmsh` for `dip != 0`

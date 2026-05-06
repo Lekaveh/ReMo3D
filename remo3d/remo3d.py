@@ -137,8 +137,9 @@ class Model():
             however a minimal combined number of cpu and gpu processes is 2. 
             By default set to 0.            
             
-        domain_radius: float, optional
-            A radius of simulation domain in meters.
+        domain_radius: float or "auto", optional
+            A radius of simulation domain in meters. Set to "auto" to size the
+            domain from the largest electrode offset.
             By default set to 50.
 
         batch_size: int, optional
@@ -738,8 +739,9 @@ class Model():
             A 1D array of depths of simulated measurements.
             Values have to be given in ascending order and corespond to depths of the model.
 
-        domain_radius: float, optional
-            A radius of simulation domain in meters.
+        domain_radius: float or "auto", optional
+            A radius of simulation domain in meters. Set to "auto" to size the
+            domain from the largest electrode offset.
             By default set to 50.
 
         batch_size: int, optional
@@ -778,6 +780,15 @@ class Model():
 
         ## Model
         # Simulation domain
+        if domain_radius == "auto":
+            max_electrode_distance = max(
+                np.max(np.abs(self.tools[tool][0,:3])) for tool in self.tools.keys()
+            )
+            domain_radius = max(10 * max_electrode_distance, 5.0)
+            print("Auto domain radius: {:.1f} m (based on max electrode distance {:.2f} m)".format(domain_radius, max_electrode_distance))
+        elif not isinstance(domain_radius, (int, float, np.integer, np.floating)) or domain_radius <= 0:
+            raise ValueError('The domain radius has to be a positive number or "auto"')
+
         domain_radius_alert = False
         for tool in self.tools.keys():
             if np.max(np.abs(self.tools[tool][0,:3])) > domain_radius:
