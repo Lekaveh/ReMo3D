@@ -32,19 +32,30 @@ and per-RHS solve steps.
 3. define trial and test functions
 4. build a bilinear form with optional static condensation
 5. assemble the axisymmetric or 3D stiffness term
-6. build the selected preconditioner
-7. assemble the bilinear form
-8. return `fes, a, c`
+6. choose the reusable solver strategy
+7. build the selected preconditioner for iterative solves, or skip it for direct
+   solves
+8. assemble the bilinear form
+9. compute a reusable sparse Cholesky inverse for small 2D systems
+10. return `fes, a, c, inv`
 
 `SolveRHS(...)` runs once per source vector:
 
 1. assemble an initially empty linear form
 2. inject point sources with `AddPointSource`
-3. solve the linear system with CG, up to 1000 steps
+3. use the cached direct inverse when available, otherwise solve with CG up to
+   1000 steps
 4. apply the shared static-condensation helper when `condense=True`
 5. return `fes, gfu`
 
-The actual solve call is:
+Small 2D systems (`fes.ndof < 10000`) use:
+
+```python
+free_dofs = fes.FreeDofs(condense) if condense else fes.FreeDofs()
+inv = a.mat.Inverse(free_dofs, inverse="sparsecholesky")
+```
+
+Other systems use:
 
 ```python
 inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
@@ -63,9 +74,10 @@ solve, then reconstructs internal DOFs with `harmonic_extension` and
 
 The GPU path in `ngsolve_functions_gpu.py` reuses the CPU `AssembleSystem(...)`
 implementation so the finite-element space, bilinear form, preconditioner, and
-static-condensation operators are built exactly the same way. Its `SolveRHS(...)`
-then transfers the assembled matrix/preconditioner to the device for each RHS
-solve.
+static-condensation operators are built exactly the same way. When assembly
+produces a direct inverse, the GPU path reuses that CPU factorization. Otherwise
+its `SolveRHS(...)` transfers the assembled matrix/preconditioner to the device
+for each RHS solve.
 
 The differences are:
 

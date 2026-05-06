@@ -13,7 +13,7 @@ from ngsolve.ngscuda import *
 
 # Ngsolve gpu funtions
 
-def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=False):
+def SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metrics=False):
     """GPU-accelerated solve for one RHS against a pre-assembled CPU system."""
     timings = {}
     rhs_started = time.perf_counter()
@@ -27,25 +27,33 @@ def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=Fa
             AddPointSource(f, tool_geometry[l], source_terms[l], model_dimensionality)
     timings["rhs"] = time.perf_counter() - rhs_started
 
-    device_started = time.perf_counter()
-    adev = a.mat.CreateDeviceMatrix()
-    cdev = c.mat.CreateDeviceMatrix()
-    timings["device_transfer_setup"] = time.perf_counter() - device_started
-
     solve_started = time.perf_counter()
-    inv = ngs.CGSolver(adev, cdev, maxsteps=1000, printrates=False)
+    solve_inv = inv
+    if solve_inv is None:
+        device_started = time.perf_counter()
+        adev = a.mat.CreateDeviceMatrix()
+        cdev = c.mat.CreateDeviceMatrix()
+        timings["device_transfer_setup"] = time.perf_counter() - device_started
+        solve_inv = ngs.CGSolver(adev, cdev, maxsteps=1000, printrates=False)
+    else:
+        timings["device_transfer_setup"] = 0.0
+
     gfu = _condensed_solve(
         a,
-        inv,
+        solve_inv,
         f,
         fes,
         condense,
-        rhs_vector_factory=lambda assembled_f: assembled_f.vec.CreateDeviceVector(copy=True),
+        rhs_vector_factory=(
+            None if inv is not None
+            else lambda assembled_f: assembled_f.vec.CreateDeviceVector(copy=True)
+        ),
     )
     timings["solve"] = time.perf_counter() - solve_started
 
     if return_metrics:
-        metrics = _solver_metrics(inv, fes, condense)
+        metrics = _solver_metrics(solve_inv, fes, condense)
+        metrics["solver_type"] = "direct" if inv is not None else "gpu_cg"
         metrics["timings"] = timings
         return fes, gfu, metrics
 
@@ -57,7 +65,7 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
     order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
 
     if return_metrics:
-        fes, a, c, assemble_metrics = AssembleSystem(
+        fes, a, c, inv, assemble_metrics = AssembleSystem(
             mesh,
             sigma,
             dirichlet_boundary,
@@ -66,12 +74,13 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
             order=order,
             return_metrics=True,
         )
-        fes, gfu, solve_metrics = SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=True)
+        fes, gfu, solve_metrics = SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metrics=True)
         metrics = solve_metrics
         metrics["timings"] = {**assemble_metrics["timings"], **solve_metrics["timings"]}
         metrics["dofs_total"] = assemble_metrics["dofs_total"]
         metrics["dofs_free"] = assemble_metrics["dofs_free"]
+        metrics["solver_type"] = solve_metrics["solver_type"]
         return fes, gfu, metrics
 
-    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
-    return SolveRHS(fes, a, c, tool_geometry, source_terms, condense)
+    fes, a, c, inv = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
+    return SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense)

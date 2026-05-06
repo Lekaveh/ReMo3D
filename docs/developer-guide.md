@@ -260,31 +260,12 @@ Common extension points:
 - stopping criteria: change `maxsteps` and add residual checks
 - adaptive refinement: add an outer refine-solve loop around the current solve
 
-### Example: direct factorization instead of CG
+### Direct factorization path
 
-#### Current CG block
-
-```python
-c = ngs.Preconditioner(a, preconditioner)
-a.Assemble()
-gfu = ngs.GridFunction(fes)
-
-inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
-gfu.vec.data = inv * f.vec
-```
-
-#### Direct-solver replacement
-
-```python
-a.Assemble()
-gfu = ngs.GridFunction(fes)
-
-inv = a.mat.Inverse(fes.FreeDofs(), inverse="sparsecholesky")
-gfu.vec.data = inv * f.vec
-```
-
-If your NGSolve build exposes an `ngs.directsolve` helper, this is the same
-swap point where it belongs.
+`AssembleSystem(...)` already uses `sparsecholesky` for small 2D systems and
+returns the reusable inverse as `inv`. `SolveRHS(...)` consumes that value and
+falls back to CG when `inv is None`. If you change the crossover logic, keep the
+preconditioner registration before `a.Assemble()` on the iterative path.
 
 ### Example: change element order
 
@@ -296,7 +277,7 @@ model.simulate_logs(..., fe_order=2)
 
 ```python
 inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
-gfu.vec.data = inv * f.vec
+gfu = _condensed_solve(a, inv, f, fes, condense)
 
 residual = f.vec.CreateVector()
 residual.data = f.vec - a.mat * gfu.vec

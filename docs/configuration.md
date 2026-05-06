@@ -106,7 +106,7 @@ Rule of thumb:
 `condense=True` enables static condensation in the bilinear form:
 
 ```python
-a = ngs.BilinearForm(fes, symmetric=False, condense=condense)
+a = ngs.BilinearForm(fes, symmetric=True, condense=condense)
 ```
 
 Implications:
@@ -115,6 +115,9 @@ Implications:
 - extra local elimination and reconstruction work
 - no change in the mathematical solution, only in how it is assembled and
   solved
+
+Small 2D systems use a sparse Cholesky direct factorization after assembly. Larger
+and 3D systems use the configured preconditioner with CG.
 
 ## 9.7 `fe_order`
 

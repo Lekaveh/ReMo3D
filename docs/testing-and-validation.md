@@ -220,6 +220,11 @@ the fixed default `domain_radius=50` against the opt-in
 `domain_radius="auto"`. Treat any `NaN`, boundary artifact, or material-response
 shift outside the project tolerance as a failed optimization for that model.
 
+For the direct-solver path, inspect the JSON `solver_type` field and compare
+small 2D runs against the Task 0 baseline. Apparent resistivity values should
+remain within the project tolerance while assembly output includes the reusable
+factorization timing.
+
 The harness runs two small 2D reference cases:
 
 - `homogeneous_10ohmm`: homogeneous mud and formation at `10 ohm-m`; the

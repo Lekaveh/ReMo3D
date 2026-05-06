@@ -461,7 +461,7 @@ size.
 The solver builds the bilinear form with:
 
 ```python
-a = ngs.BilinearForm(fes, symmetric=False, condense=condense)
+a = ngs.BilinearForm(fes, symmetric=True, condense=condense)
 ```
 
 With order-3 elements, static condensation removes many element-internal DOFs

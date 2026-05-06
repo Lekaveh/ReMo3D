@@ -8,6 +8,8 @@ import time
 
 # Ngsolve funtions
 
+DIRECT_SOLVER_DOF_THRESHOLD = 10000
+
 def AddPointSource(f, position, fac, model_dimensionality):
         spc = f.space
         if model_dimensionality==2:
@@ -24,10 +26,7 @@ def AddPointSource(f, position, fac, model_dimensionality):
 
 def _count_free_dofs(fes, condense):
     """Return the number of free DOFs when NGSolve exposes the BitArray count."""
-    try:
-        free_dofs = fes.FreeDofs(condense) if condense else fes.FreeDofs()
-    except TypeError:
-        free_dofs = fes.FreeDofs()
+    free_dofs = _free_dofs(fes, condense)
 
     for attr_name in ("NumSet", "numset"):
         attr = getattr(free_dofs, attr_name, None)
@@ -41,6 +40,13 @@ def _count_free_dofs(fes, condense):
         return int(sum(bool(free_dofs[i]) for i in range(len(free_dofs))))
     except Exception:
         return None
+
+
+def _free_dofs(fes, condense):
+    try:
+        return fes.FreeDofs(condense) if condense else fes.FreeDofs()
+    except TypeError:
+        return fes.FreeDofs()
 
 
 def _solver_stat(inv, names):
@@ -100,7 +106,7 @@ def _condensed_solve(a, inv, f, fes, condense, rhs_vector_factory=None):
     return gfu
 
 def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=3, return_metrics=False):
-    """Assemble the stiffness matrix and preconditioner once per mesh/sigma pair."""
+    """Assemble the stiffness matrix and reusable solver data once per mesh/sigma pair."""
     order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
 
     timings = {}
@@ -111,7 +117,7 @@ def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, or
     u = fes.TrialFunction()
     v = fes.TestFunction()
 
-    a = ngs.BilinearForm(fes, symmetric=False, condense=condense)
+    a = ngs.BilinearForm(fes, symmetric=True, condense=condense)
 
     if model_dimensionality==2:
         a += 2*np.pi*ngs.grad(u)*ngs.grad(v)*ngs.x*sigma*ngs.dx
@@ -119,23 +125,35 @@ def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, or
         a += ngs.grad(u)*ngs.grad(v)*sigma*ngs.dx
     timings["setup"] = time.perf_counter() - setup_started
 
+    use_direct = model_dimensionality == 2 and fes.ndof < DIRECT_SOLVER_DOF_THRESHOLD
+
+    c = None
+    if not use_direct:
+        c = ngs.Preconditioner(a, preconditioner)
+
     assembly_started = time.perf_counter()
-    c = ngs.Preconditioner(a, preconditioner)
     a.Assemble()
     timings["assembly"] = time.perf_counter() - assembly_started
+
+    factorization_started = time.perf_counter()
+    inv = None
+    if use_direct:
+        inv = a.mat.Inverse(_free_dofs(fes, condense), inverse="sparsecholesky")
+    timings["factorization"] = time.perf_counter() - factorization_started
 
     if return_metrics:
         metrics = {
             "dofs_total": int(getattr(fes, "ndof", 0)),
             "dofs_free": _count_free_dofs(fes, condense),
+            "solver_type": "direct" if inv is not None else "cg",
             "timings": timings,
         }
-        return fes, a, c, metrics
+        return fes, a, c, inv, metrics
 
-    return fes, a, c
+    return fes, a, c, inv
 
 
-def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=False):
+def SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metrics=False):
     """Solve one right-hand side against a pre-assembled system."""
     timings = {}
     rhs_started = time.perf_counter()
@@ -150,12 +168,15 @@ def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=Fa
     timings["rhs"] = time.perf_counter() - rhs_started
 
     solve_started = time.perf_counter()
-    inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
-    gfu = _condensed_solve(a, inv, f, fes, condense)
+    solve_inv = inv
+    if solve_inv is None:
+        solve_inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
+    gfu = _condensed_solve(a, solve_inv, f, fes, condense)
     timings["solve"] = time.perf_counter() - solve_started
 
     if return_metrics:
-        metrics = _solver_metrics(inv, fes, condense)
+        metrics = _solver_metrics(solve_inv, fes, condense)
+        metrics["solver_type"] = "direct" if inv is not None else "cg"
         metrics["timings"] = timings
         return fes, gfu, metrics
 
@@ -167,7 +188,7 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
     order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
 
     if return_metrics:
-        fes, a, c, assemble_metrics = AssembleSystem(
+        fes, a, c, inv, assemble_metrics = AssembleSystem(
             mesh,
             sigma,
             dirichlet_boundary,
@@ -176,12 +197,13 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
             order=order,
             return_metrics=True,
         )
-        fes, gfu, solve_metrics = SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=True)
+        fes, gfu, solve_metrics = SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metrics=True)
         metrics = solve_metrics
         metrics["timings"] = {**assemble_metrics["timings"], **solve_metrics["timings"]}
         metrics["dofs_total"] = assemble_metrics["dofs_total"]
         metrics["dofs_free"] = assemble_metrics["dofs_free"]
+        metrics["solver_type"] = assemble_metrics["solver_type"]
         return fes, gfu, metrics
 
-    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
-    return SolveRHS(fes, a, c, tool_geometry, source_terms, condense)
+    fes, a, c, inv = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
+    return SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense)
