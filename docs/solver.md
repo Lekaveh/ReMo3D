@@ -20,22 +20,29 @@ Algorithm:
 For 2D the source location is interpreted as `mesh(0, position)`. For 3D it is
 interpreted as `mesh(0, 0, position)`.
 
-## 6.2 `SolveBVP` CPU Version
+## 6.2 CPU Solver Path
 
-The CPU solver path in `ngsolve_functions.py` is:
+The CPU solver path in `ngsolve_functions.py` is split into reusable assembly
+and per-RHS solve steps.
+
+`AssembleSystem(...)` runs once per mesh/conductivity pair:
 
 1. infer model dimensionality from `mesh.dim`
 2. create an H1 finite-element space with `order=3`
 3. define trial and test functions
 4. build a bilinear form with optional static condensation
 5. assemble the axisymmetric or 3D stiffness term
-6. assemble an initially empty linear form
-7. inject point sources with `AddPointSource`
-8. build the selected preconditioner
-9. assemble the bilinear form
-10. solve the linear system with CG, up to 1000 steps
-11. apply the shared static-condensation helper when `condense=True`
-12. return `fes, gfu`
+6. build the selected preconditioner
+7. assemble the bilinear form
+8. return `fes, a, c`
+
+`SolveRHS(...)` runs once per source vector:
+
+1. assemble an initially empty linear form
+2. inject point sources with `AddPointSource`
+3. solve the linear system with CG, up to 1000 steps
+4. apply the shared static-condensation helper when `condense=True`
+5. return `fes, gfu`
 
 The actual solve call is:
 
@@ -44,6 +51,9 @@ inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
 gfu = _condensed_solve(a, inv, f, fes, condense)
 ```
 
+`SolveBVP(...)` remains as a compatibility wrapper that calls
+`AssembleSystem(...)` and then `SolveRHS(...)`.
+
 `_condensed_solve` is the single source of truth for the static-condensation
 ordering. It applies `harmonic_extension_trans` to the RHS before the condensed
 solve, then reconstructs internal DOFs with `harmonic_extension` and
@@ -51,8 +61,11 @@ solve, then reconstructs internal DOFs with `harmonic_extension` and
 
 ## 6.3 `SolveBVP` GPU Version
 
-The GPU path in `ngsolve_functions_gpu.py` is intentionally close to the CPU
-path so the numerical formulation stays identical.
+The GPU path in `ngsolve_functions_gpu.py` reuses the CPU `AssembleSystem(...)`
+implementation so the finite-element space, bilinear form, preconditioner, and
+static-condensation operators are built exactly the same way. Its `SolveRHS(...)`
+then transfers the assembled matrix/preconditioner to the device for each RHS
+solve.
 
 The differences are:
 

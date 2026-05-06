@@ -102,14 +102,17 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
             mesh = ngs.Mesh(mesh)
             sigma = ngs.CoefficientFunction(sigma)
 
+            ## Assemble stiffness matrix and preconditioner once for this batch
+            fes, a, c = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense)
+
             ## Compute measured resistivity
             for modelling_task in task[2]:
                 tool = modelling_task[1]
                 tool_geometry = tool[0,:]
                 source_terms = tool[1,:]
 
-                ## Solve BVP
-                fes, gfu = ngsf.SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense)        
+                ## Solve BVP for this right-hand side
+                fes, gfu = ngsf.SolveRHS(fes, a, c, tool_geometry, source_terms, condense)
 
                 # Compute resistivity values
                 for rc_task in modelling_task[2]:

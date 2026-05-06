@@ -91,8 +91,8 @@ def _condensed_solve(a, inv, f, fes, condense, rhs_vector_factory=None):
 
     return gfu
 
-def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, return_metrics=False):
-
+def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, return_metrics=False):
+    """Assemble the stiffness matrix and preconditioner once per mesh/sigma pair."""
     timings = {}
     setup_started = time.perf_counter()
     model_dimensionality = mesh.dim
@@ -109,20 +109,35 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
         a += ngs.grad(u)*ngs.grad(v)*sigma*ngs.dx
     timings["setup"] = time.perf_counter() - setup_started
 
-    #start_time = datetime.datetime.now()  
+    assembly_started = time.perf_counter()
+    c = ngs.Preconditioner(a, preconditioner)
+    a.Assemble()
+    timings["assembly"] = time.perf_counter() - assembly_started
+
+    if return_metrics:
+        metrics = {
+            "dofs_total": int(getattr(fes, "ndof", 0)),
+            "dofs_free": _count_free_dofs(fes, condense),
+            "timings": timings,
+        }
+        return fes, a, c, metrics
+
+    return fes, a, c
+
+
+def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=False):
+    """Solve one right-hand side against a pre-assembled system."""
+    timings = {}
     rhs_started = time.perf_counter()
+
     f = ngs.LinearForm(fes)
     f.Assemble()
+    model_dimensionality = f.space.mesh.dim
 
     for l in range(np.shape(source_terms)[0]):
         if source_terms[l] != 0.0:
             AddPointSource(f, tool_geometry[l], source_terms[l], model_dimensionality)
     timings["rhs"] = time.perf_counter() - rhs_started
-
-    assembly_started = time.perf_counter()
-    c = ngs.Preconditioner(a, preconditioner)
-    a.Assemble()
-    timings["assembly"] = time.perf_counter() - assembly_started
 
     solve_started = time.perf_counter()
     inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
@@ -135,3 +150,25 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
         return fes, gfu, metrics
 
     return fes, gfu
+
+
+def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, return_metrics=False):
+    """Original API preserved for backward compatibility."""
+    if return_metrics:
+        fes, a, c, assemble_metrics = AssembleSystem(
+            mesh,
+            sigma,
+            dirichlet_boundary,
+            preconditioner,
+            condense,
+            return_metrics=True,
+        )
+        fes, gfu, solve_metrics = SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=True)
+        metrics = solve_metrics
+        metrics["timings"] = {**assemble_metrics["timings"], **solve_metrics["timings"]}
+        metrics["dofs_total"] = assemble_metrics["dofs_total"]
+        metrics["dofs_free"] = assemble_metrics["dofs_free"]
+        return fes, gfu, metrics
+
+    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense)
+    return SolveRHS(fes, a, c, tool_geometry, source_terms, condense)
