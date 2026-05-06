@@ -28,7 +28,7 @@ and per-RHS solve steps.
 `AssembleSystem(...)` runs once per mesh/conductivity pair:
 
 1. infer model dimensionality from `mesh.dim`
-2. create an H1 finite-element space with `order=3`
+2. create an H1 finite-element space with the configured `fe_order`
 3. define trial and test functions
 4. build a bilinear form with optional static condensation
 5. assemble the axisymmetric or 3D stiffness term
@@ -93,12 +93,12 @@ gfu = _condensed_solve(
 The FE space, bilinear form, point-source assembly, and static-condensation
 reconstruction remain conceptually the same.
 
-## 6.4 Why an H1 Space of Order 3
+## 6.4 H1 Polynomial Order
 
-The solver hard-codes:
+The solver defaults to the historical cubic basis:
 
 ```python
-fes = ngs.H1(mesh, order=3, dirichlet=dirichlet_boundary, autoupdate=True)
+fes = ngs.H1(mesh, order=order, dirichlet=dirichlet_boundary, autoupdate=True)
 ```
 
 Implications:
@@ -109,9 +109,9 @@ Implications:
   spaces, especially near current electrodes and strong local gradients
 - the price is more DOFs per element and therefore a larger solve cost
 
-This is a sensible compromise for smooth elliptic fields with localized source
-singularities that still need accurate potential differences at electrode
-locations.
+The public `fe_order` parameter defaults to `3` to preserve previous behavior.
+Lowering it, commonly to `2`, is a speed/accuracy tradeoff that should be
+benchmarked against representative `fe_order=3` results.
 
 ## 6.5 Solver Output and Evaluation
 
@@ -217,7 +217,7 @@ slowly because the assembled system is harder to precondition effectively.
 The mesh-side tuning logic is documented in:
 
 - [`mesh-generation.md`](mesh-generation.md#47-mesh-size-control-strategy)
-- [`configuration.md`](configuration.md#98-internal-geometry-window-and-meshing-knobs)
+- [`configuration.md`](configuration.md#99-internal-geometry-window-and-meshing-knobs)
 
 The key practical interaction is:
 

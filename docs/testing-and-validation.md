@@ -211,6 +211,10 @@ Run it from the repository root in an environment with Netgen/NGSolve:
 python scripts/benchmark_task0.py --output benchmarks/task0_baseline.json
 ```
 
+To compare finite-element orders for Task 4, run the same harness with
+`--fe-order 2` and `--fe-order 3`, then compare DOF counts, timings, and
+apparent resistivity values in the JSON outputs.
+
 The harness runs two small 2D reference cases:
 
 - `homogeneous_10ohmm`: homogeneous mud and formation at `10 ohm-m`; the

@@ -352,6 +352,7 @@ Broadcast payload:
 - `mesh_generator`
 - `preconditioner`
 - `condense`
+- `fe_order`
 - `task_list`
 
 ### Dynamic dispatch phase

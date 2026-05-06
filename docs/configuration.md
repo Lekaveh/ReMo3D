@@ -24,6 +24,7 @@ behind the meshing defaults, see [`mesh-generation.md`](mesh-generation.md).
 | `mesh_generator` | `str` | `"auto"` | `"auto"`, `"netgen"`, `"gmsh"` | Mesh backend selection | `netgen` is only for 2D; `gmsh` is required for 3D |
 | `preconditioner` | `str` | `"multigrid"` | `"local"`, `"multigrid"` | NGSolve preconditioner name | Affects CG convergence and setup cost |
 | `condense` | `bool` | `True` | `True`, `False` | Toggle static condensation | Often reduces solve cost for order-3 FE spaces |
+| `fe_order` | `int` | `3` | positive integer | Polynomial order of the H1 finite element space | Lower orders reduce DOFs and cost but can change apparent resistivity accuracy |
 
 ## 9.2 `domain_radius`
 
@@ -104,7 +105,22 @@ Implications:
 - no change in the mathematical solution, only in how it is assembled and
   solved
 
-## 9.7 CPU and GPU Worker Configuration
+## 9.7 `fe_order`
+
+`fe_order` controls the polynomial order passed to NGSolve's H1 finite-element
+space:
+
+```python
+fes = ngs.H1(mesh, order=fe_order, dirichlet=dirichlet_boundary, autoupdate=True)
+```
+
+The default `fe_order=3` preserves the historical cubic basis. Reducing to
+`fe_order=2` can reduce DOF count and solve time, especially in 2D runs, but it
+is an accuracy tradeoff rather than a free optimization. Compare `fe_order=2`
+against `fe_order=3` on the benchmark harness or on representative project
+models before using it for production results.
+
+## 9.8 CPU and GPU Worker Configuration
 
 ### How workers are assigned
 
@@ -136,7 +152,7 @@ If that fails, the code prints a warning and resets `gpu_workers` to zero.
 - Memory use grows with worker count because every worker receives the broadcast
   model data and creates its own local meshes and FE objects.
 
-## 9.8 Internal Geometry Window and Meshing Knobs
+## 9.9 Internal Geometry Window and Meshing Knobs
 
 These are not exposed as public API parameters today, but they are important
 internal controls if you are modifying the mesh backends.

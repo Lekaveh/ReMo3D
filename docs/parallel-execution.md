@@ -46,6 +46,7 @@ Broadcast payload:
 - `mesh_generator`
 - `preconditioner`
 - `condense`
+- `fe_order`
 - `task_list`
 
 Mechanisms used:

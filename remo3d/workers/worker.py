@@ -54,6 +54,7 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
     mesh_generator = str()
     preconditioner = str()
     condense = bool()
+    fe_order = int()
     task_list = list()
 
     # Fill variables with data
@@ -67,6 +68,7 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
     mesh_generator = comm.bcast(mesh_generator, root=0)
     preconditioner = comm.bcast(preconditioner, root=0)
     condense = comm.bcast(condense, root=0)
+    fe_order = comm.bcast(fe_order, root=0)
     task_list = comm.bcast(task_list, root=0)
 
     ## Wait for all workers to receive data
@@ -103,7 +105,7 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
             sigma = ngs.CoefficientFunction(sigma)
 
             ## Assemble stiffness matrix and preconditioner once for this batch
-            fes, a, c = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense)
+            fes, a, c = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=fe_order)
 
             ## Compute measured resistivity
             for modelling_task in task[2]:

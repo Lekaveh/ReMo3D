@@ -254,7 +254,8 @@ natural boundary terms added to the bilinear form.
 
 Common extension points:
 
-- element order: change `order=3` in both solver modules
+- element order: use the public `fe_order` parameter or the solver-level
+  `order` argument
 - Krylov solver: replace `CGSolver` with another NGSolve solver
 - stopping criteria: change `maxsteps` and add residual checks
 - adaptive refinement: add an outer refine-solve loop around the current solve
@@ -288,7 +289,7 @@ swap point where it belongs.
 ### Example: change element order
 
 ```python
-fes = ngs.H1(mesh, order=4, dirichlet=dirichlet_boundary, autoupdate=True)
+model.simulate_logs(..., fe_order=2)
 ```
 
 ### Example: add a convergence check for CG

@@ -80,7 +80,8 @@ class Model():
         batch_size=5,
         mesh_generator="auto",
         preconditioner="multigrid",
-        condense=True):
+        condense=True,
+        fe_order=3):
         """
         This function performs complete moddeling procedure.
         
@@ -154,7 +155,11 @@ class Model():
 
         condense: bool, optional
             Specify if static condensation will be utilized to eliminate unknowns that are internal to elements from the global linear system.
-            By default set to True.            
+            By default set to True.
+
+        fe_order: int, optional
+            Polynomial order of the H1 finite element space.
+            By default set to 3.
             
         Returns
         -------
@@ -165,9 +170,12 @@ class Model():
 
         model.set_model_parameters(formation_model, borehole_model, borehole_geometry_type=borehole_geometry_type, dip=dip)
 
+        if type(fe_order) != int or fe_order < 1:
+            raise ValueError("The finite element order has to be a positive integer")
+
         model.initialize_workers(cpu_workers=cpu_workers, gpu_workers=gpu_workers)
 
-        model.simulate_logs(measurement_depths, domain_radius=domain_radius, batch_size=batch_size, mesh_generator=mesh_generator, preconditioner=preconditioner, condense=condense)
+        model.simulate_logs(measurement_depths, domain_radius=domain_radius, batch_size=batch_size, mesh_generator=mesh_generator, preconditioner=preconditioner, condense=condense, fe_order=fe_order)
 
         model.shutdown_workers()
         
@@ -720,7 +728,7 @@ class Model():
         return borehole_parameters
     
     
-    def simulate_logs(self, measurement_depths, domain_radius=50, batch_size=5, mesh_generator="auto", preconditioner="multigrid", condense=True):
+    def simulate_logs(self, measurement_depths, domain_radius=50, batch_size=5, mesh_generator="auto", preconditioner="multigrid", condense=True, fe_order=3):
         """
         This function prepares data, dispatches tasks to workers, gathers and assembles generated synthetic logs.
         
@@ -749,6 +757,10 @@ class Model():
         condense: bool, optional
             Specify if static condensation will be utilized to eliminate unknowns that are internal to elements from the global linear system.
             By default set to True.
+
+        fe_order: int, optional
+            Polynomial order of the H1 finite element space.
+            By default set to 3.
         """
         ### Start the clock
         start_time = datetime.datetime.now()
@@ -760,6 +772,9 @@ class Model():
             batch_mode = True
         else:
             batch_mode = False
+
+        if type(fe_order) != int or fe_order < 1:
+            raise ValueError("The finite element order has to be a positive integer")
 
         ## Model
         # Simulation domain
@@ -833,6 +848,7 @@ class Model():
         self.comm.bcast(mesh_generator, root=MPI.ROOT)
         self.comm.bcast(preconditioner, root=MPI.ROOT)
         self.comm.bcast(condense, root=MPI.ROOT)
+        self.comm.bcast(fe_order, root=MPI.ROOT)
         self.comm.bcast(task_list, root=MPI.ROOT)
 
         ## Wait for all workers to receive data

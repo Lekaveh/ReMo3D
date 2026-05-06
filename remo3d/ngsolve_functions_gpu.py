@@ -6,7 +6,7 @@ import time
     
 ngs.ngsglobals.msg_level=0
 
-from ngsolve_functions import AddPointSource, AssembleSystem, _condensed_solve, _solver_metrics
+from ngsolve_functions import AddPointSource, AssembleSystem, _condensed_solve, _normalize_order_and_metrics, _solver_metrics
 
 from ngsolve.ngscuda import *
 
@@ -52,8 +52,10 @@ def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=Fa
     return fes, gfu
 
 
-def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, solve_on="CPU", return_metrics=False):
+def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, solve_on="CPU", order=3, return_metrics=False):
     """Original API preserved for backward compatibility."""
+    order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
+
     if return_metrics:
         fes, a, c, assemble_metrics = AssembleSystem(
             mesh,
@@ -61,6 +63,7 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
             dirichlet_boundary,
             preconditioner,
             condense,
+            order=order,
             return_metrics=True,
         )
         fes, gfu, solve_metrics = SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=True)
@@ -70,5 +73,5 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
         metrics["dofs_free"] = assemble_metrics["dofs_free"]
         return fes, gfu, metrics
 
-    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense)
+    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
     return SolveRHS(fes, a, c, tool_geometry, source_terms, condense)

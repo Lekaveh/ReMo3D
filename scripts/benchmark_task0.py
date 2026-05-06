@@ -112,7 +112,7 @@ def _array(data: Iterable[Iterable[float]]) -> np.ndarray:
     return np.asarray(list(data), dtype=float)
 
 
-def run_case(case: BenchmarkCase, condense: bool, preconditioner: str) -> RunResult:
+def run_case(case: BenchmarkCase, condense: bool, preconditioner: str, fe_order: int) -> RunResult:
     formation_parameters = _array(case.formation_parameters)
     borehole_model = _array(case.borehole_model)
     tool_geometry = np.asarray(case.tool_geometry, dtype=float)
@@ -151,6 +151,7 @@ def run_case(case: BenchmarkCase, condense: bool, preconditioner: str) -> RunRes
         [2],
         preconditioner,
         condense,
+        order=fe_order,
         return_metrics=True,
     )
     timings.update(solver_metrics.get("timings", {}))
@@ -180,18 +181,19 @@ def _relative_error(candidate: np.ndarray, baseline: np.ndarray) -> np.ndarray:
     return np.abs(candidate - baseline) / scale
 
 
-def run_benchmarks(tolerance: float, preconditioner: str) -> Dict:
+def run_benchmarks(tolerance: float, preconditioner: str, fe_order: int) -> Dict:
     cases = reference_cases()
     results: dict = {
         "tolerance_relative": tolerance,
         "preconditioner": preconditioner,
+        "fe_order": fe_order,
         "cases": [],
         "passed": True,
     }
 
     for case in cases:
-        baseline = run_case(case, condense=False, preconditioner=preconditioner)
-        condensed = run_case(case, condense=True, preconditioner=preconditioner)
+        baseline = run_case(case, condense=False, preconditioner=preconditioner, fe_order=fe_order)
+        condensed = run_case(case, condense=True, preconditioner=preconditioner, fe_order=fe_order)
 
         baseline_values = np.asarray(baseline.apparent_resistivity)
         condensed_values = np.asarray(condensed.apparent_resistivity)
@@ -239,6 +241,12 @@ def main() -> int:
         help="NGSolve preconditioner name passed to SolveBVP.",
     )
     parser.add_argument(
+        "--fe-order",
+        type=int,
+        default=3,
+        help="Polynomial order of the H1 finite element space.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -246,7 +254,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    results = run_benchmarks(args.tolerance, args.preconditioner)
+    if args.fe_order < 1:
+        parser.error("--fe-order must be a positive integer")
+
+    results = run_benchmarks(args.tolerance, args.preconditioner, args.fe_order)
     text = json.dumps(results, indent=2)
     print(text)
 

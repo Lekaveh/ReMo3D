@@ -69,6 +69,14 @@ def _solver_metrics(inv, fes, condense):
     }
 
 
+def _normalize_order_and_metrics(order, return_metrics):
+    if type(order) == bool:
+        return 3, order
+    if type(order) != int or order < 1:
+        raise ValueError("The finite element order has to be a positive integer")
+    return order, return_metrics
+
+
 def _condensed_solve(a, inv, f, fes, condense, rhs_vector_factory=None):
     """Single source of truth for static-condensation solve ordering.
 
@@ -91,13 +99,15 @@ def _condensed_solve(a, inv, f, fes, condense, rhs_vector_factory=None):
 
     return gfu
 
-def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, return_metrics=False):
+def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=3, return_metrics=False):
     """Assemble the stiffness matrix and preconditioner once per mesh/sigma pair."""
+    order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
+
     timings = {}
     setup_started = time.perf_counter()
     model_dimensionality = mesh.dim
 
-    fes = ngs.H1(mesh, order=3, dirichlet=dirichlet_boundary, autoupdate=True)
+    fes = ngs.H1(mesh, order=order, dirichlet=dirichlet_boundary, autoupdate=True)
     u = fes.TrialFunction()
     v = fes.TestFunction()
 
@@ -152,8 +162,10 @@ def SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=Fa
     return fes, gfu
 
 
-def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, return_metrics=False):
+def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, order=3, return_metrics=False):
     """Original API preserved for backward compatibility."""
+    order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
+
     if return_metrics:
         fes, a, c, assemble_metrics = AssembleSystem(
             mesh,
@@ -161,6 +173,7 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
             dirichlet_boundary,
             preconditioner,
             condense,
+            order=order,
             return_metrics=True,
         )
         fes, gfu, solve_metrics = SolveRHS(fes, a, c, tool_geometry, source_terms, condense, return_metrics=True)
@@ -170,5 +183,5 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
         metrics["dofs_free"] = assemble_metrics["dofs_free"]
         return fes, gfu, metrics
 
-    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense)
+    fes, a, c = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
     return SolveRHS(fes, a, c, tool_geometry, source_terms, condense)
