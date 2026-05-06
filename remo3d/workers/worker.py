@@ -13,6 +13,8 @@ import gmsh_functions as gmf
 import netgen_functions as ngf
 import ngsolve_functions as ngsf
 
+WORKER_DEBUG = os.environ.get("REMO3D_WORKER_DEBUG", "").lower() in ("1", "true", "yes", "on")
+
 # Supress Netgen teminal output during mesh creation process
 ngs.ngsglobals.msg_level = 0
 
@@ -132,7 +134,9 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
 
                     # Append result to results
                     results.append([rc_task[0], rc_task[1], result])
-        except:
+        except Exception:
+            if WORKER_DEBUG:
+                raise
             for modelling_task in task[2]:
                 for rc_task in modelling_task[2]:
                     results.append([rc_task[0], rc_task[1], np.nan])

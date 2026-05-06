@@ -2,6 +2,7 @@
 
 import numpy as np
 import ngsolve as ngs
+import time
 
 #ngs.ngsglobals.msg_level=0
 
@@ -20,8 +21,80 @@ def AddPointSource(f, position, fac, model_dimensionality):
         for d,s in zip(dnums, shape):
             f.vec[d] += fac*s
 
-def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense):
 
+def _count_free_dofs(fes, condense):
+    """Return the number of free DOFs when NGSolve exposes the BitArray count."""
+    try:
+        free_dofs = fes.FreeDofs(condense) if condense else fes.FreeDofs()
+    except TypeError:
+        free_dofs = fes.FreeDofs()
+
+    for attr_name in ("NumSet", "numset"):
+        attr = getattr(free_dofs, attr_name, None)
+        if callable(attr):
+            try:
+                return int(attr())
+            except TypeError:
+                pass
+
+    try:
+        return int(sum(bool(free_dofs[i]) for i in range(len(free_dofs))))
+    except Exception:
+        return None
+
+
+def _solver_stat(inv, names):
+    """Read a solver statistic across NGSolve version-specific spellings."""
+    for name in names:
+        attr = getattr(inv, name, None)
+        if attr is None:
+            continue
+        try:
+            value = attr() if callable(attr) else attr
+        except TypeError:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+    return None
+
+
+def _solver_metrics(inv, fes, condense):
+    return {
+        "dofs_total": int(getattr(fes, "ndof", 0)),
+        "dofs_free": _count_free_dofs(fes, condense),
+        "cg_iterations": _solver_stat(inv, ("GetSteps", "GetIterations", "iterations", "steps")),
+        "final_residual_norm": _solver_stat(inv, ("GetResidual", "GetResiduum", "residual", "residuum")),
+    }
+
+
+def _condensed_solve(a, inv, f, fes, condense, rhs_vector_factory=None):
+    """Single source of truth for static-condensation solve ordering.
+
+    This follows the documented NGSolve sequence: apply
+    harmonic_extension_trans to the RHS before the condensed solve, then
+    reconstruct internal DOFs with harmonic_extension and inner_solve after the
+    solve. Benchmark code in scripts/benchmark_task0.py compares this path with
+    condense=False baselines.
+    """
+    gfu = ngs.GridFunction(fes)
+    if condense:
+        f.vec.data += a.harmonic_extension_trans * f.vec
+
+    rhs_vec = rhs_vector_factory(f) if rhs_vector_factory is not None else f.vec
+    gfu.vec.data = inv * rhs_vec
+
+    if condense:
+        gfu.vec.data += a.harmonic_extension * gfu.vec
+        gfu.vec.data += a.inner_solve * f.vec
+
+    return gfu
+
+def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, return_metrics=False):
+
+    timings = {}
+    setup_started = time.perf_counter()
     model_dimensionality = mesh.dim
 
     fes = ngs.H1(mesh, order=3, dirichlet=dirichlet_boundary, autoupdate=True)
@@ -34,25 +107,31 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
         a += 2*np.pi*ngs.grad(u)*ngs.grad(v)*ngs.x*sigma*ngs.dx
     elif model_dimensionality==3:
         a += ngs.grad(u)*ngs.grad(v)*sigma*ngs.dx
+    timings["setup"] = time.perf_counter() - setup_started
 
     #start_time = datetime.datetime.now()  
+    rhs_started = time.perf_counter()
     f = ngs.LinearForm(fes)
     f.Assemble()
 
     for l in range(np.shape(source_terms)[0]):
         if source_terms[l] != 0.0:
             AddPointSource(f, tool_geometry[l], source_terms[l], model_dimensionality)
+    timings["rhs"] = time.perf_counter() - rhs_started
 
+    assembly_started = time.perf_counter()
     c = ngs.Preconditioner(a, preconditioner)
     a.Assemble()
-    gfu = ngs.GridFunction(fes)
-    
-    inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
-    gfu.vec.data = inv * f.vec
+    timings["assembly"] = time.perf_counter() - assembly_started
 
-    if condense==True:
-        f.vec.data += a.harmonic_extension_trans * f.vec
-        gfu.vec.data += a.harmonic_extension * gfu.vec
-        gfu.vec.data += a.inner_solve * f.vec
-        
+    solve_started = time.perf_counter()
+    inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
+    gfu = _condensed_solve(a, inv, f, fes, condense)
+    timings["solve"] = time.perf_counter() - solve_started
+
+    if return_metrics:
+        metrics = _solver_metrics(inv, fes, condense)
+        metrics["timings"] = timings
+        return fes, gfu, metrics
+
     return fes, gfu

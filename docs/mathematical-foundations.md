@@ -332,9 +332,15 @@ using:
 
 ```python
 f.vec.data += a.harmonic_extension_trans * f.vec
+gfu.vec.data = inv * f.vec
 gfu.vec.data += a.harmonic_extension * gfu.vec
 gfu.vec.data += a.inner_solve * f.vec
 ```
+
+This ordering is centralized in `ngsolve_functions._condensed_solve` and reused
+by both CPU and GPU solver paths. The Task 0 benchmark harness compares this
+condensed sequence against `condense=False` baselines before later performance
+optimizations are accepted.
 
 ## 2.9 Preconditioners
 

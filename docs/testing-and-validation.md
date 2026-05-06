@@ -198,6 +198,34 @@ A practical staged validation path is:
 3. benchmark model 3 for 3D dip behavior
 4. thin-bedded model for depth-assignment and thin-bed sensitivity
 
+### Task 0 Static-Condensation Benchmark
+
+The performance-optimization baseline is implemented in
+`scripts/benchmark_task0.py`. It bypasses MPI workers and calls the Netgen and
+NGSolve solver path directly, so solver exceptions are raised instead of being
+converted to `NaN` worker results.
+
+Run it from the repository root in an environment with Netgen/NGSolve:
+
+```text
+python scripts/benchmark_task0.py --output benchmarks/task0_baseline.json
+```
+
+The harness runs two small 2D reference cases:
+
+- `homogeneous_10ohmm`: homogeneous mud and formation at `10 ohm-m`; the
+  apparent resistivity is reported against the analytical homogeneous value.
+- `two_layer_10_100ohmm`: a two-layer boundary-response regression case; the
+  non-condensed solve is the numerical baseline.
+
+For each case, the harness records mesh generation, NGSolve conversion,
+assembly, solve, and evaluation timings; total and free DOF counts; CG
+iteration and residual fields when exposed by the installed NGSolve version;
+and apparent resistivity values. The required pass condition is that the
+validated `condense=True` sequence matches the `condense=False` baseline within
+the configured relative tolerance (`1e-3` by default). Any `NaN` or `Inf` result
+is treated as a solver failure.
+
 ## 15.3 Known Limitations and Edge Cases
 
 The current code has several practical limits worth documenting:

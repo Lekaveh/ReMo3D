@@ -33,17 +33,21 @@ The CPU solver path in `ngsolve_functions.py` is:
 7. inject point sources with `AddPointSource`
 8. build the selected preconditioner
 9. assemble the bilinear form
-10. allocate the grid function
-11. solve the linear system with CG, up to 1000 steps
-12. reconstruct condensed DOFs if needed
-13. return `fes, gfu`
+10. solve the linear system with CG, up to 1000 steps
+11. apply the shared static-condensation helper when `condense=True`
+12. return `fes, gfu`
 
 The actual solve call is:
 
 ```python
 inv = ngs.CGSolver(a.mat, c.mat, maxsteps=1000)
-gfu.vec.data = inv * f.vec
+gfu = _condensed_solve(a, inv, f, fes, condense)
 ```
+
+`_condensed_solve` is the single source of truth for the static-condensation
+ordering. It applies `harmonic_extension_trans` to the RHS before the condensed
+solve, then reconstructs internal DOFs with `harmonic_extension` and
+`inner_solve`.
 
 ## 6.3 `SolveBVP` GPU Version
 
@@ -62,8 +66,15 @@ Core device setup:
 ```python
 adev = a.mat.CreateDeviceMatrix()
 cdev = c.mat.CreateDeviceMatrix()
-fdev = f.vec.CreateDeviceVector(copy=True)
 inv = ngs.CGSolver(adev, cdev, maxsteps=1000, printrates=False)
+gfu = _condensed_solve(
+    a,
+    inv,
+    f,
+    fes,
+    condense,
+    rhs_vector_factory=lambda assembled_f: assembled_f.vec.CreateDeviceVector(copy=True),
+)
 ```
 
 The FE space, bilinear form, point-source assembly, and static-condensation
@@ -155,7 +166,9 @@ Common causes of worker-side solver failures are:
    suspected
 5. inspect whether the worker output becomes `NaN`, which indicates that the
    broad worker `try/except` caught the failure
-6. if modifying the solver, add residual checks and print the local solve depth,
+6. set `REMO3D_WORKER_DEBUG=1` to make worker task exceptions re-raise instead
+   of being converted to `NaN`
+7. if modifying the solver, add residual checks and print the local solve depth,
    current-electrode geometry, and conductivity distribution for the failing task
 
 ### Recommended parameter adjustments
