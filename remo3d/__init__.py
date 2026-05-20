@@ -11,5 +11,15 @@ __email__ = "michal.m.wilkosz@gmail.com"
 __version__ = "1.4.0"
 
 from .remo3d import Model  # Import Model from remo3d.py (if it's defined there)
+from .sensitivity import (
+    analytical_sensitivity,
+    perturbation_sensitivity,
+    plot_sensitivity,
+)
 
-__all__ = ["Model"]
+__all__ = [
+    "Model",
+    "analytical_sensitivity",
+    "perturbation_sensitivity",
+    "plot_sensitivity",
+]

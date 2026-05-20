@@ -926,6 +926,41 @@ class Model():
             self.comm.send(obj=msg, dest=status.Get_source())                             
 
         
+    @staticmethod
+    def _build_model_patches(formation_parameters, borehole_parameters, dip, model_rad_lim):
+        """
+        Build matplotlib polygon patches for the formation cross-section (layers, filtration zones, borehole).
+        Returns (patches, resistivities) where resistivities matches the order of patches and
+        has NaN entries for layers without filtration zones.
+        """
+        patches = []
+        a = np.tan(dip*np.pi/180)
+        formation_parameters[0,0] -= a*model_rad_lim[1]   # adjust model to fill the plot
+        formation_parameters[-1,1] += a*model_rad_lim[1]  # adjust model to fill the plot
+        for i in range(np.shape(formation_parameters)[0]):
+            vetrices = np.array([[model_rad_lim[0], formation_parameters[i,0]+a*model_rad_lim[0]],
+                [model_rad_lim[0], formation_parameters[i,1]+a*model_rad_lim[0]],
+                [model_rad_lim[1], formation_parameters[i,1]+a*model_rad_lim[1]],
+                [model_rad_lim[1], formation_parameters[i,0]+a*model_rad_lim[1]]])
+            patches.append(Polygon(vetrices, closed=True))
+            if not np.isnan(formation_parameters[i,2]):
+                vetrices = np.array([[-formation_parameters[i,2], formation_parameters[i,0]+a*-formation_parameters[i,2]],
+                    [-formation_parameters[i,2], formation_parameters[i,1]+a*-formation_parameters[i,2]],
+                    [formation_parameters[i,2], formation_parameters[i,1]+a*formation_parameters[i,2]],
+                    [formation_parameters[i,2], formation_parameters[i,0]+a*formation_parameters[i,2]]])
+                patches.append(Polygon(vetrices, closed=True))
+        resistivities = np.ndarray.flatten(np.flip(formation_parameters[:,3:], axis=1))
+
+        if borehole_parameters is not None:
+            left_boundary = borehole_parameters[:,[1,0]]*[-1, 1]
+            right_boundary = borehole_parameters[:,[1,0]]
+            vetrices = np.vstack([left_boundary, np.flip(right_boundary, axis=0)])
+            patches.append(Polygon(vetrices, closed=True))
+            resistivities = np.hstack([resistivities, np.mean(borehole_parameters[:,2])])
+
+        return patches, resistivities
+
+
     def save_results(self, output_folder=None, measurements_to_save="auto", plot_layout="auto", plot_depth_lim="auto", plot_aspect_ratio="auto", model_rad_lim="auto",
                      model_res_lim="auto", logs_res_lim="auto", logs_at_nan="break", logs_interpolation_factor=1, logs_colours="auto"):
         """
@@ -1053,43 +1088,7 @@ class Model():
             plot_aspect_ratio = (plot_depth_lim[1] - plot_depth_lim[0])/25*1.25
 
         ## Prepare polygons
-        patches = []
-
-        # Formation
-        a = np.tan(dip*np.pi/180)
-        formation_parameters[0,0] -= a* model_rad_lim[1] # adjust model to fill the plot
-        formation_parameters[-1,1] += a* model_rad_lim[1] # adjust model to fill the plot
-        for i in range(np.shape(formation_parameters)[0]):
-            if np.isnan(formation_parameters[i,2]) == True:
-                vetrices = np.array([[ model_rad_lim[0], formation_parameters[i,0]+a* model_rad_lim[0]],
-                    [model_rad_lim[0], formation_parameters[i,1]+a* model_rad_lim[0]],
-                    [model_rad_lim[1], formation_parameters[i,1]+a* model_rad_lim[1]],
-                    [model_rad_lim[1], formation_parameters[i,0]+a* model_rad_lim[1]]])
-                polygon = Polygon(vetrices, closed=True)
-                patches.append(polygon)
-            else:
-                vetrices = np.array([[ model_rad_lim[0], formation_parameters[i,0]+a* model_rad_lim[0]],
-                    [model_rad_lim[0], formation_parameters[i,1]+a* model_rad_lim[0]],
-                    [model_rad_lim[1], formation_parameters[i,1]+a* model_rad_lim[1]],
-                    [model_rad_lim[1], formation_parameters[i,0]+a* model_rad_lim[1]]])
-                polygon = Polygon(vetrices, closed=True)
-                patches.append(polygon)
-                vetrices = np.array([[-formation_parameters[i,2], formation_parameters[i,0]+a*-formation_parameters[i,2]],
-                    [-formation_parameters[i,2], formation_parameters[i,1]+a*-formation_parameters[i,2]],
-                    [formation_parameters[i,2], formation_parameters[i,1]+a*formation_parameters[i,2]],
-                    [formation_parameters[i,2], formation_parameters[i,0]+a*formation_parameters[i,2]]])
-                polygon = Polygon(vetrices, closed=True)
-                patches.append(polygon)
-        resistivities = np.ndarray.flatten(np.flip(formation_parameters[:,3:], axis=1))
-
-        # Borehole
-        if borehole_parameters is not None:
-            left_boundary = borehole_parameters[:,[1,0]]*[-1, 1]
-            right_boundary = borehole_parameters[:,[1,0]]
-            vetrices = np.vstack([left_boundary, np.flip(right_boundary, axis=0)])
-            polygon = Polygon(vetrices, closed=True)
-            patches.append(polygon)
-            resistivities = np.hstack([resistivities, np.mean(borehole_parameters[:,2])])
+        patches, resistivities = self._build_model_patches(formation_parameters, borehole_parameters, dip, model_rad_lim)
         borehole_axis = Line2D([0, 0], plot_depth_lim, color='black')
 
         ## Plot model and logs
