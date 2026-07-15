@@ -77,9 +77,12 @@ corrupts the far-tail (99%) values. Directions are measured independently
 (radial; vertical split into up/down) — see
 [`plot_sensitivity_doi` / `_measure_doi`](../../remo3d/sensitivity.py).
 
-> ⚠️ Note: the interactive `plot_sensitivity_doi` framing uses `_measure_doi`,
-> which is tuned for the 90% box; its per-tool 90% values agree with this table
-> to ~10%. This table's routine is the reference for multi-fraction DOI.
+> Note: the interactive `plot_sensitivity_doi` uses `_measure_doi`, which now
+> shares this routine's approach (fixed cell size scaled to the tool, grow until
+> the requested fraction converges) and agrees with this table across fractions.
+> An earlier version fixed the point count while growing the domain, which
+> coarsened the grid on the heavy high-fraction tail and could mis-order tools
+> (e.g. A2.0 reporting a larger 92% DOI than A4.0) — fixed.
 
 ## Links
 

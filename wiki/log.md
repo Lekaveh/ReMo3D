@@ -34,3 +34,8 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - Robust routine: fixed cell size scaled to tool, grow domain until 99% converges, read all fractions off one cumulative curve (monotonic).
 - Validated by reciprocity (A2.0M0.5N≡N0.5M2.0A, A4.0M0.5N≡M4.0A0.5B) and r90≈AM for normals.
 - Wrote findings/doi-table.md + machine-readable notebooks/doi_sensitivity_table.csv. Indexed.
+
+## [2026-07-15] fix | _measure_doi grid-resolution bug (DOI mis-ordering)
+- plot_sensitivity_doi's _measure_doi fixed the point count while growing the domain -> coarse grid on high-fraction tails -> A2.0 reported larger 92% DOI than A4.0.
+- Fix: fixed cell size scaled to tool + converge on requested fraction (same logic as the DOI table routine). r_eff now strictly increases with tool length at all fractions; ~1s/call.
+- Touched: remo3d/sensitivity.py::_measure_doi; note updated in findings/doi-table.md.

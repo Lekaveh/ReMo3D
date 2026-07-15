@@ -503,56 +503,49 @@ def _cumulative_extent(masses, distances, fraction):
 
 def _measure_doi(tool, depth, formation, borehole, fraction,
                  rho_background, epsilon, n_r, n_z,
-                 max_passes=12, grow=1.8, edge_frac=0.6, rel_tol=0.02):
+                 max_passes=16, grow=1.6, edge_frac=0.6, rel_tol=0.02):
     """Measure the directional DOI on a domain that adapts to the tool.
 
     The default plotting grid ties the radial half-width to the borehole radius
-    (``10 × r_borehole``), which truncates the radial sensitivity of longer
-    tools and makes ``r_eff`` come out roughly the same for every tool. Here the
-    domain is instead seeded from the electrode span and each half-width is
-    enlarged whenever its extent reaches the boundary (``edge_frac``) or is still
-    drifting between passes (``rel_tol``), until all three extents sit inside the
-    domain and have stabilised. A final pass on a grid confined to the converged
-    box gives sharp, resolution-independent values.
+    (``10 × r_borehole``), which truncates longer tools and makes ``r_eff`` look
+    the same for every tool. Instead the domain is seeded from the electrode span
+    and grown until the extent at ``fraction`` converges (changes < ``rel_tol``
+    and sits inside the domain, i.e. below ``edge_frac`` of the half-width). The
+    **cell size is fixed and scaled to the tool** — not the point count — so the
+    resolution stays roughly constant as the domain grows. That is what keeps
+    high-fraction (heavy-tail) extents stable and correctly ordered across tools;
+    keeping the point count fixed while growing the domain coarsened the grid and
+    let e.g. A2.0 report a larger 92 % DOI than A4.0. All three directions are
+    read from the same kernel so they are mutually consistent.
 
     Returns
     -------
     r_eff, dz_up, dz_down : float
     """
     span = max((abs(z) for _, z in _electrode_positions(tool)), default=1.0)
-    R = max(2.0 * span, 1.0)          # radial half-width
-    Zu = Zd = max(2.0 * span, 1.0)    # vertical half-widths (up / down)
+    cell = max(span / 160.0, 0.004)         # fixed cell size, scaled to the tool
+    n_floor = max(int(n_r), int(n_z), 600)  # honour caller's grid as a floor
+    R = max(4.0 * span, 2.0)                # square (r, z) half-width
 
     prev = None
     r_eff = dz_up = dz_down = 0.0
     for _ in range(max_passes):
-        rf = np.linspace(-R, R, n_r)
-        zf = np.linspace(depth - Zu, depth + Zd, n_z)
+        n = int(np.clip(2.0 * R / cell, n_floor, 4200))
+        rf = np.linspace(-R, R, n)
+        zf = np.linspace(depth - R, depth + R, n)
         S, rf, zf = analytical_sensitivity(
             tool, depth, formation, borehole,
             r_grid=rf, z_grid=zf,
             rho_background=rho_background, epsilon=epsilon)
         r_eff, dz_up, dz_down = _effective_extent(S, rf, zf, depth, fraction=fraction)
 
-        grew = False
-        if r_eff > edge_frac * R:
-            R *= grow; grew = True
-        if dz_up > edge_frac * Zu:
-            Zu *= grow; grew = True
-        if dz_down > edge_frac * Zd:
-            Zd *= grow; grew = True
-        if prev is not None and not grew:
-            moved = max(abs(c - p) / max(c, 1e-9)
-                        for c, p in zip((r_eff, dz_up, dz_down), prev))
-            if moved > rel_tol:            # tail not fully captured yet
-                R *= grow; Zu *= grow; Zd *= grow; grew = True
-        prev = (r_eff, dz_up, dz_down)
-        if not grew:
-            break
+        big = max(r_eff, dz_up, dz_down)
+        if prev is not None and abs(big - prev) / max(big, 1e-9) < rel_tol \
+                and big < edge_frac * R:
+            break                          # converged and comfortably inside
+        prev = big
+        R *= grow
 
-    # The converged domain contains essentially all the sensitivity, so these
-    # extents are unbiased; the domain scales with the tool, so the fixed grid
-    # keeps a roughly tool-independent (~2 %) resolution.
     return r_eff, dz_up, dz_down
 
 
