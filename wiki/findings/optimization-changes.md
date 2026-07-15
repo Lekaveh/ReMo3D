@@ -89,16 +89,25 @@ numeric comparison). Default stays `50 m`. Flagged as opt-in because
 auto-sizing can change results on models with large invasion or thin beds near
 the boundary.
 
-## Not implemented — and why it matters
+## Not implemented — what's left for 2D
 
-- **Task 3 (CG `tol`)**: final code still `CGSolver(a.mat, c.mat, maxsteps=1000)`
-  with no tolerance — so the [silent no-convergence-check caveat](../concepts/fem-solver.md)
-  is unchanged. A candidate quick win still on the table.
-- **Tasks 6 & 7 (Netgen meshing)**: `netgen_functions.py` was never modified;
-  the O(n²) boundary-point `vstack` and float-equality scans remain. Low impact
-  except on many-layer models.
-- **Task 9 (2D GPU warning)**: no guard added; users can still set
-  `gpu_workers>0` for 2D and silently lose performance.
+The remaining **2D-relevant** work is in mesh generation:
+
+- **Tasks 6 & 7 (Netgen meshing) — the real 2D gap.** `netgen_functions.py`
+  (the default 2D mesh generator) was never modified; the O(n²) boundary-point
+  `vstack` (Task 6) and float-equality boundary scans (Task 7) remain. Mesh
+  generation is the 2D bottleneck (~35–55% of wall time), so these are the
+  highest-value 2D items left. Task 6 is a safe pure refactor; Task 7 helps
+  mainly on many-layer models.
+- **Task 9 (2D GPU warning) — a guardrail, not a speedup.** No guard added, so a
+  user can still set `gpu_workers>0` for 2D and silently lose performance.
+
+**Task 3 (CG `tol`) — dropped for the 2D case.** Typical 2D now uses the direct
+solver (Task 5), not CG, so an explicit CG tolerance is moot for the 2D path. It
+would only matter for large 2D (above the direct-solver DOF threshold) or 3D
+that fall back to CG, where it guards the
+[silent no-convergence caveat](../concepts/fem-solver.md) — so it is out of scope
+for 2D optimization.
 
 ## Open threads
 

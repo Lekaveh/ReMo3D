@@ -39,3 +39,6 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - plot_sensitivity_doi's _measure_doi fixed the point count while growing the domain -> coarse grid on high-fraction tails -> A2.0 reported larger 92% DOI than A4.0.
 - Fix: fixed cell size scaled to tool + converge on requested fraction (same logic as the DOI table routine). r_eff now strictly increases with tool length at all fractions; ~1s/call.
 - Touched: remo3d/sensitivity.py::_measure_doi; note updated in findings/doi-table.md.
+
+## [2026-07-15] update | DOI optimization to-do: drop Task 3 for 2D
+- findings/optimization-changes.md: removed Task 3 (explicit CG tol) from the 2D to-do list — moot for 2D since the direct solver (Task 5) replaced CG there; kept 6/7 (mesh gen, the 2D bottleneck) and 9 (guardrail).
