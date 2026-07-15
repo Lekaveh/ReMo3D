@@ -36,6 +36,7 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import SymLogNorm, Normalize
+from matplotlib.patches import Rectangle
 
 from .remo3d import Model
 
@@ -121,26 +122,30 @@ def _parse_tool(tool):
 # Model loading helper
 # ---------------------------------------------------------------------------
 
-def _load_formation(formation_model, formation_units=("M", "M", "M")):
+def _load_formation(tools, formation_model, formation_units=("M", "M", "M")):
     """Accept a path or ndarray and return a metres-converted (N, 5) array."""
-    helper = Model(["A1.0M1.0N"])
+    helper = Model(tools)
     if isinstance(formation_model, str):
         return helper.load_formation_parameters(formation_model)
     arr = np.atleast_2d(np.asarray(formation_model, dtype=float)).copy()
     return helper.set_formation_parameters(arr, list(formation_units))
 
 
-def _load_borehole(borehole_model, borehole_geometry_type="diameter",
+def _load_borehole(tools, borehole_model, borehole_geometry_type="diameter",
                    borehole_units=("M", "M")):
     """Accept a path or ndarray and return a metres-converted (N, 3) array."""
-    helper = Model(["A1.0M1.0N"])
+    helper = Model(tools)
     if isinstance(borehole_model, str):
-        return helper.load_borehole_parameters(borehole_model,
-                                               borehole_geometry_type=borehole_geometry_type)
+        return helper.load_borehole_parameters(
+            borehole_model,
+            borehole_geometry_type=borehole_geometry_type
+        )
     arr = np.atleast_2d(np.asarray(borehole_model, dtype=float)).copy()
-    return helper.set_borehole_parameters(arr,
-                                          borehole_geometry_type=borehole_geometry_type,
-                                          borehole_units=list(borehole_units))
+    return helper.set_borehole_parameters(
+        arr,
+        borehole_geometry_type=borehole_geometry_type,
+        borehole_units=list(borehole_units)
+    )
 
 
 def _resistivity_at_depth(depth, formation):
@@ -240,8 +245,8 @@ def analytical_sensitivity(tool, depth, formation_model, borehole_model,
     r_grid : ndarray
     z_grid : ndarray
     """
-    formation = _load_formation(formation_model, formation_units)
-    borehole = _load_borehole(borehole_model,
+    formation = _load_formation([tool], formation_model, formation_units)
+    borehole = _load_borehole([tool], borehole_model,
                               borehole_geometry_type=borehole_geometry_type,
                               borehole_units=borehole_units)
 
@@ -369,8 +374,8 @@ def perturbation_sensitivity(tool, depth, formation_model, borehole_model,
     -------
     S : ndarray, shape (len(z_grid), len(r_grid))
     """
-    formation = _load_formation(formation_model, formation_units)
-    borehole = _load_borehole(borehole_model,
+    formation = _load_formation([tool], formation_model, formation_units)
+    borehole = _load_borehole([tool], borehole_model,
                               borehole_geometry_type=borehole_geometry_type,
                               borehole_units=borehole_units)
 
@@ -436,6 +441,291 @@ def _draw_formation_outline(ax, formation, borehole, dip, model_rad_lim, depth_l
     ax.plot([0, 0], depth_lim, color='black', linewidth=0.8)
 
 
+def _electrode_positions(tool):
+    """
+    Return ``[(label, z_offset), ...]`` for each electrode literally present in
+    the tool string (in order: top → bottom along the tool), with z_offset
+    measured from the tool measurement point (positive = below the MP).
+
+    Unlike ``_parse_tool``, this does NOT apply the A↔M / B↔N reciprocity swap —
+    it returns the original electrode labels so they can be annotated on a plot.
+    """
+    groups = [''.join(g) for _, g in itertools.groupby(tool, str.isalpha)]
+    letters = [g for g in groups if g.isalpha()]
+    numbers = [float(g) for g in groups if not g.isalpha()]
+    if len(letters) != 3 or len(numbers) != 2:
+        raise ValueError("{} logging tool specification is uncorrect".format(tool))
+    positions = np.array([0.0, numbers[0], numbers[0] + numbers[1]])
+    if numbers[0] < numbers[1]:
+        z_mp = numbers[0] / 2
+    elif numbers[0] > numbers[1]:
+        z_mp = numbers[0] + numbers[1] / 2
+    else:
+        raise ValueError("{} logging tool specification is uncorrect".format(tool))
+    return [(letters[i], float(positions[i] - z_mp)) for i in range(3)]
+
+
+def _draw_electrodes(ax, tool, depth):
+    """Mark electrode positions on the borehole axis with their letter labels."""
+    color_map = {"A": "#d62728", "B": "#d62728", "M": "#1f77b4", "N": "#1f77b4"}
+    for label, z_off in _electrode_positions(tool):
+        z_e = depth + z_off
+        ax.plot(0, z_e, marker="o", markersize=7,
+                markerfacecolor=color_map.get(label, "black"),
+                markeredgecolor="white", markeredgewidth=1.2,
+                linestyle="None", zorder=10)
+        ax.annotate(label, xy=(0, z_e), xytext=(7, 0),
+                    textcoords="offset points",
+                    fontsize=10, fontweight="bold",
+                    color=color_map.get(label, "black"),
+                    va="center", ha="left", zorder=11)
+
+
+def _cumulative_extent(masses, distances, fraction):
+    """Smallest distance from the origin capturing ``fraction`` of ``masses``.
+
+    ``masses`` and ``distances`` are 1D arrays over the same coordinate samples.
+    The samples are ordered by increasing distance and the cumulative mass
+    (normalised by its own total) is thresholded at ``fraction``.
+    """
+    masses = np.asarray(masses, dtype=float)
+    distances = np.asarray(distances, dtype=float)
+    if masses.size == 0:
+        return 0.0
+    total = masses.sum()
+    if total <= 0:
+        return float(np.max(distances))
+    order = np.argsort(distances)
+    cum = np.cumsum(masses[order]) / total
+    idx = min(int(np.searchsorted(cum, fraction)), len(order) - 1)
+    return float(distances[order][idx])
+
+
+def _measure_doi(tool, depth, formation, borehole, fraction,
+                 rho_background, epsilon, n_r, n_z,
+                 max_passes=12, grow=1.8, edge_frac=0.6, rel_tol=0.02):
+    """Measure the directional DOI on a domain that adapts to the tool.
+
+    The default plotting grid ties the radial half-width to the borehole radius
+    (``10 × r_borehole``), which truncates the radial sensitivity of longer
+    tools and makes ``r_eff`` come out roughly the same for every tool. Here the
+    domain is instead seeded from the electrode span and each half-width is
+    enlarged whenever its extent reaches the boundary (``edge_frac``) or is still
+    drifting between passes (``rel_tol``), until all three extents sit inside the
+    domain and have stabilised. A final pass on a grid confined to the converged
+    box gives sharp, resolution-independent values.
+
+    Returns
+    -------
+    r_eff, dz_up, dz_down : float
+    """
+    span = max((abs(z) for _, z in _electrode_positions(tool)), default=1.0)
+    R = max(2.0 * span, 1.0)          # radial half-width
+    Zu = Zd = max(2.0 * span, 1.0)    # vertical half-widths (up / down)
+
+    prev = None
+    r_eff = dz_up = dz_down = 0.0
+    for _ in range(max_passes):
+        rf = np.linspace(-R, R, n_r)
+        zf = np.linspace(depth - Zu, depth + Zd, n_z)
+        S, rf, zf = analytical_sensitivity(
+            tool, depth, formation, borehole,
+            r_grid=rf, z_grid=zf,
+            rho_background=rho_background, epsilon=epsilon)
+        r_eff, dz_up, dz_down = _effective_extent(S, rf, zf, depth, fraction=fraction)
+
+        grew = False
+        if r_eff > edge_frac * R:
+            R *= grow; grew = True
+        if dz_up > edge_frac * Zu:
+            Zu *= grow; grew = True
+        if dz_down > edge_frac * Zd:
+            Zd *= grow; grew = True
+        if prev is not None and not grew:
+            moved = max(abs(c - p) / max(c, 1e-9)
+                        for c, p in zip((r_eff, dz_up, dz_down), prev))
+            if moved > rel_tol:            # tail not fully captured yet
+                R *= grow; Zu *= grow; Zd *= grow; grew = True
+        prev = (r_eff, dz_up, dz_down)
+        if not grew:
+            break
+
+    # The converged domain contains essentially all the sensitivity, so these
+    # extents are unbiased; the domain scales with the tool, so the fixed grid
+    # keeps a roughly tool-independent (~2 %) resolution.
+    return r_eff, dz_up, dz_down
+
+
+def _effective_extent(S, r_grid, z_grid, depth, fraction=0.9):
+    """
+    Effective extent of investigation from a sensitivity kernel, computed
+    **independently for each direction** so an asymmetric kernel is not forced
+    into a single symmetric box:
+
+    * ``r_eff``   — radial half-extent. The kernel is axisymmetric (symmetric in
+      r), so a single value describes both ``+r`` and ``−r``.
+    * ``dz_up``   — vertical extent *above* the measurement point (``z < depth``).
+    * ``dz_down`` — vertical extent *below* the measurement point (``z > depth``).
+
+    Each extent is the smallest distance from its origin (borehole axis for r,
+    measurement depth for z) at which the accumulated ``|S|`` along that
+    direction reaches ``fraction`` of that direction's own total. Splitting the
+    vertical axis into up/down captures the asymmetry of lateral tools, which a
+    single ``|z − depth|`` accumulation would average away.
+
+    Returns
+    -------
+    r_eff, dz_up, dz_down : float
+    """
+    Sabs = np.where(np.isfinite(S), np.abs(S), 0.0)
+
+    # Radial (symmetric): collapse over z, accumulate over |r|.
+    r_eff = _cumulative_extent(Sabs.sum(axis=0), np.abs(r_grid), fraction)
+
+    # Vertical: split into the upper and lower half relative to the measurement
+    # depth and treat each side on its own. The centre row (z == depth) belongs
+    # to both sides at distance 0 and does not affect the extent.
+    row_sums = Sabs.sum(axis=1)
+    dz = z_grid - depth
+    upper = dz <= 0.0
+    lower = dz >= 0.0
+    dz_up = _cumulative_extent(row_sums[upper], np.abs(dz[upper]), fraction)
+    dz_down = _cumulative_extent(row_sums[lower], np.abs(dz[lower]), fraction)
+
+    return r_eff, dz_up, dz_down
+
+
+def _draw_doi(ax, depth, r_eff, dz_up, dz_down, fraction, color="0.1"):
+    """Overlay the effective DOI on a sensitivity plot in both directions.
+
+    Draws the radial reach as vertical lines at ``r = ±r_eff``, the vertical
+    reach as horizontal lines at ``depth − dz_up`` and ``depth + dz_down``, and
+    the enclosing box. Each extent is annotated with its value.
+    """
+    z_up = depth - dz_up
+    z_down = depth + dz_down
+    line_kw = dict(color=color, lw=1.2, ls="--", alpha=0.9, zorder=5)
+
+    # Radial reach (symmetric ±r_eff) and vertical reach (asymmetric up/down).
+    ax.axvline(+r_eff, **line_kw)
+    ax.axvline(-r_eff, **line_kw)
+    ax.axhline(z_up, **line_kw)
+    ax.axhline(z_down, **line_kw)
+
+    # Enclosing DOI box.
+    ax.add_patch(Rectangle((-r_eff, z_up), 2 * r_eff, dz_up + dz_down,
+                           fill=False, edgecolor=color, lw=1.4, ls="--",
+                           zorder=6))
+
+    # Measurement point.
+    ax.plot(0.0, depth, marker="o", ms=4, color=color, zorder=7)
+
+    txt_kw = dict(color=color, fontsize=8, zorder=7,
+                  bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7))
+    ax.annotate("r = {:.2f} m".format(r_eff), xy=(r_eff, depth),
+                ha="right", va="bottom", **txt_kw)
+    ax.annotate("↑ {:.2f} m".format(dz_up), xy=(0.0, z_up),
+                ha="center", va="bottom", **txt_kw)
+    ax.annotate("↓ {:.2f} m".format(dz_down), xy=(0.0, z_down),
+                ha="center", va="top", **txt_kw)
+
+
+def plot_sensitivity_doi(tool, depth, formation_model, borehole_model,
+                         fraction=0.9, n_r=160, n_z=160,
+                         rho_background=None, epsilon=0.01,
+                         formation_units=("M", "M", "M"),
+                         borehole_units=("M", "M"),
+                         borehole_geometry_type="diameter",
+                         draw_doi=True, doi_margin=1.15, doi_color="0.1",
+                         refine=True,
+                         **plot_kwargs):
+    """
+    Plot the sensitivity kernel for ``tool`` at ``depth`` with the depth of
+    investigation (DOI) computed and drawn **independently in each direction**:
+    the radial reach ``r_eff`` and the vertical reach split into ``dz_up``
+    (above the measurement point) and ``dz_down`` (below it).
+
+    Internally calls ``analytical_sensitivity`` once on a default grid, derives
+    the three extents via ``_effective_extent`` (cumulative ``|S|`` threshold),
+    frames the plot around the DOI box (enlarged by ``doi_margin`` so the box is
+    visible), then overlays the box and per-direction markers via ``_draw_doi``.
+
+    Parameters
+    ----------
+    fraction : float, optional
+        Cumulative |S| threshold defining each directional extent (default 0.9).
+    draw_doi : bool, optional
+        Overlay the DOI box and directional markers (default True).
+    doi_margin : float, optional
+        Axis limits are set to the DOI extent times this factor so the box is
+        not flush against the frame (default 1.15).
+    doi_color : optional
+        Colour of the DOI overlay.
+    refine : bool, optional
+        Measure the DOI on a domain that adapts to the tool (default True) via
+        ``_measure_doi``, instead of the default plotting grid whose radial
+        half-width is tied to the borehole radius. The default grid truncates
+        the radial sensitivity of longer tools, making ``r_eff`` come out nearly
+        identical for every tool; the adaptive domain lets it scale with the
+        tool as expected. Set False for the legacy single-pass behaviour.
+    plot_kwargs : dict
+        Forwarded to ``plot_sensitivity`` (e.g. ``method``, ``log_scale``,
+        ``cmap``, ``ax``, ``title``, ``colorbar``, ``vmax`` …). ``r_lim`` and
+        ``z_lim`` here override the auto-computed extent.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    formation = _load_formation([tool], formation_model, formation_units)
+    borehole = _load_borehole([tool], borehole_model,
+                              borehole_geometry_type=borehole_geometry_type,
+                              borehole_units=borehole_units)
+
+    if refine:
+        # Measure the DOI on a domain that adapts to the tool, so the radial
+        # extent is driven by physics rather than truncated by the default grid
+        # (which is tied to the borehole radius and made r_eff look identical
+        # for every tool).
+        r_eff, dz_up, dz_down = _measure_doi(
+            tool, depth, formation, borehole, fraction,
+            rho_background, epsilon, n_r, n_z)
+    else:
+        # Legacy single pass on the default (borehole-radius-tied) grid.
+        r_grid, z_grid, _, _ = _default_grids(formation, borehole, depth, n_r, n_z)
+        S, r_grid, z_grid = analytical_sensitivity(
+            tool, depth, formation, borehole,
+            r_grid=r_grid, z_grid=z_grid,
+            rho_background=rho_background, epsilon=epsilon)
+        r_eff, dz_up, dz_down = _effective_extent(S, r_grid, z_grid, depth,
+                                                  fraction=fraction)
+
+    # Frame around the (generally non-square, vertically asymmetric) DOI box,
+    # enlarged slightly so the overlaid box sits inside the plot.
+    r_span = r_eff * doi_margin
+    plot_kwargs.setdefault("r_lim", (-r_span, r_span))
+    plot_kwargs.setdefault("z_lim", (depth - dz_up * doi_margin,
+                                     depth + dz_down * doi_margin))
+    plot_kwargs.setdefault("n_r", n_r)
+    plot_kwargs.setdefault("n_z", n_z)
+    plot_kwargs.setdefault("rho_background", rho_background)
+    plot_kwargs.setdefault("epsilon", epsilon)
+    plot_kwargs.setdefault("formation_units", formation_units)
+    plot_kwargs.setdefault("borehole_units", borehole_units)
+    plot_kwargs.setdefault("borehole_geometry_type", borehole_geometry_type)
+    if "title" not in plot_kwargs:
+        plot_kwargs["title"] = (
+            "Sensitivity — {}  at z = {:.2f} m\n"
+            "DOI ({:.0%}): r = {:.2f} m,  ↑ {:.2f} m / ↓ {:.2f} m"
+        ).format(tool, depth, fraction, r_eff, dz_up, dz_down)
+
+    ax = plot_sensitivity(tool, depth, formation_model, borehole_model,
+                          **plot_kwargs)
+    if draw_doi:
+        _draw_doi(ax, depth, r_eff, dz_up, dz_down, fraction, color=doi_color)
+    return ax
+
+
 def plot_sensitivity(tool, depth, formation_model, borehole_model,
                      method="born",
                      r_lim=None, z_lim=None, n_r=160, n_z=160,
@@ -472,8 +762,8 @@ def plot_sensitivity(tool, depth, formation_model, borehole_model,
     -------
     ax : matplotlib.axes.Axes
     """
-    formation = _load_formation(formation_model, formation_units)
-    borehole = _load_borehole(borehole_model,
+    formation = _load_formation([tool], formation_model, formation_units)
+    borehole = _load_borehole([tool], borehole_model,
                               borehole_geometry_type=borehole_geometry_type,
                               borehole_units=borehole_units)
 
@@ -520,6 +810,8 @@ def plot_sensitivity(tool, depth, formation_model, borehole_model,
 
     if overlay_formation:
         _draw_formation_outline(ax, formation, borehole, dip, r_lim, z_lim)
+
+    _draw_electrodes(ax, tool, depth)
 
     ax.set_xlim(r_lim)
     ax.set_ylim(z_lim)
