@@ -29,6 +29,11 @@ except:
 ## Collect and wait for all workers to receive data
 solve_on = list()
 solve_on = comm.bcast(solve_on, root=0)
+# Process-unique mesh-file directory chosen by the manager (see
+# initialize_workers in remo3d.py). Overwrite the module-level fallback so every
+# worker of this run reads/writes the same isolated directory.
+tmp_dir = comm.bcast(None, root=0)
+gmf.TMP_DIR = tmp_dir
 comm.barrier()
 
 # Import ngsolve functions

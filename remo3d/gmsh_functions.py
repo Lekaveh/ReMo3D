@@ -6,6 +6,23 @@ import numpy as np
 import scipy.interpolate as spi
 import netgen.meshing as msh
 
+import getpass
+import socket
+import tempfile
+
+# Machine-local, user-specific directory for transient mesh files. Must NOT be
+# a shared (NFS) working-directory path: concurrent runs on different machines
+# would overwrite each other's rank-numbered mesh files and race on cleanup.
+#
+# This module-level value is only a fallback default. In the normal MPI flow the
+# spawned workers overwrite it (gmf.TMP_DIR = <broadcast path>) with a
+# process-unique path broadcast by the manager (see initialize_workers in
+# remo3d.py), so that concurrent runs sharing the same user AND host also get
+# isolated mesh directories.
+TMP_DIR = os.path.join(
+    tempfile.gettempdir(),
+    "remo3d_tmp_{}_{}".format(getpass.getuser(), socket.gethostname()))
+
 
 def _far_mesh_factor():
     """Optional far-field mesh coarsening factor (#3), controlled by the environment
@@ -541,11 +558,11 @@ def ConstructGmsh2dModel(domain_radius, tool_geometry, source_terms, formation_g
 
     # Save file
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-    gmsh.write("./tmp/fm_"+str(file_number)+".msh")
+    gmsh.write(os.path.join(TMP_DIR, "fm_"+str(file_number)+".msh"))
     gmsh.finalize()
     
     # Read file and convert to netgen format
-    mesh = ReadGmsh("./tmp/fm_"+str(file_number)+".msh", 2)   
+    mesh = ReadGmsh(os.path.join(TMP_DIR, "fm_"+str(file_number)+".msh"), 2)   
     
     # Save or return mesh
     if output_mode == "file":
@@ -683,11 +700,11 @@ def ConstructGmsh3dModel(domain_radius, tool_geometry, source_terms, formation_g
 
     # Save file
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-    gmsh.write("./tmp/fm_"+str(file_number)+".msh")
+    gmsh.write(os.path.join(TMP_DIR, "fm_"+str(file_number)+".msh"))
     gmsh.finalize()
     
     # Read file and convert to netgen format
-    mesh = ReadGmsh("./tmp/fm_"+str(file_number)+".msh", 3)   
+    mesh = ReadGmsh(os.path.join(TMP_DIR, "fm_"+str(file_number)+".msh"), 3)   
     
     # Save or return mesh
     if output_mode == "file":

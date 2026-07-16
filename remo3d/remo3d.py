@@ -14,9 +14,13 @@ import numpy as np
 import scipy.interpolate as spi
 import itertools
 import datetime
+import getpass
 import shutil
+import socket
 import sys
+import tempfile
 import os
+import uuid
 
 ##  Main classes and functions
 
@@ -56,7 +60,8 @@ class Model():
         self.gpu_workers = None
         self.gpu_workers = None
         self.comm = None
-        
+        self.tmp_dir = None
+
         # Initialize results atributes
         self.logs = None
 
@@ -616,8 +621,21 @@ class Model():
                 args=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'workers/worker.py'), 
                 maxprocs=n_workers)    
   
+        # Per-invocation temporary directory for mesh files. Machine-local and
+        # user-specific, plus a process-unique suffix (pid + random token) so
+        # that concurrent runs sharing the same user AND host (several jobs on
+        # one node) do not write to the same rank-numbered mesh files or race on
+        # cleanup. Generated here once, before any worker uses it, and broadcast
+        # below; the workers cannot recompute it themselves because their pids differ.
+        self.tmp_dir = os.path.join(
+            tempfile.gettempdir(),
+            "remo3d_tmp_{}_{}_{}_{}".format(
+                getpass.getuser(), socket.gethostname(),
+                os.getpid(), uuid.uuid4().hex[:8]))
+
         ## Send and wait for all workers to receive data
         self.comm.bcast(solve_on, root=MPI.ROOT)
+        self.comm.bcast(self.tmp_dir, root=MPI.ROOT)
         self.comm.barrier()    
     
             
@@ -860,9 +878,20 @@ class Model():
         if ~np.isclose(self.dip_deg, 0) and mesh_generator!="gmsh":
             raise ValueError("The only mesh generator supported in 3D models is gmsh")
 
-        # Create temporary directory for mesh files
-        if mesh_generator=="gmsh" and not os.path.exists("./tmp"):
-            os.makedirs("./tmp")
+        # Temporary directory for mesh files. Generated once per worker set in
+        # initialize_workers() and broadcast to the spawned workers there, so this
+        # manager and its workers agree on the same process-unique path. Fall back
+        # to computing it here in case simulate_logs is ever driven without
+        # initialize_workers() (in which case there are no spawned workers anyway).
+        tmp_dir = self.tmp_dir
+        if tmp_dir is None:
+            tmp_dir = os.path.join(
+                tempfile.gettempdir(),
+                "remo3d_tmp_{}_{}_{}_{}".format(
+                    getpass.getuser(), socket.gethostname(),
+                    os.getpid(), uuid.uuid4().hex[:8]))
+        if mesh_generator=="gmsh":
+            os.makedirs(tmp_dir, exist_ok=True)
 
         # Create dense borehole geometry for the purpose of 3D mesh generation (necessary to avoid errors during meshing procedure)
         if self.dip_deg!=0:
@@ -965,9 +994,10 @@ class Model():
         for i in range(len(self.tools.keys())):
             logs[list(self.tools.keys())[i]] = np.vstack([measurement_depths, results[:,i]]).T
 
-        ### Remove tmp folder and mesh files
+        ### Remove tmp folder and mesh files (ignore_errors: a concurrent
+        ### same-machine run or leftover files must not crash the cleanup)
         if mesh_generator=="gmsh":
-            shutil.rmtree("./tmp")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
         ### Report time of computation
         elapsed = datetime.datetime.now() - start_time
