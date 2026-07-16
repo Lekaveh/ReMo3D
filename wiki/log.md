@@ -42,3 +42,9 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 
 ## [2026-07-15] update | DOI optimization to-do: drop Task 3 for 2D
 - findings/optimization-changes.md: removed Task 3 (explicit CG tol) from the 2D to-do list — moot for 2D since the direct solver (Task 5) replaced CG there; kept 6/7 (mesh gen, the 2D bottleneck) and 9 (guardrail).
+
+## [2026-07-16] finding | Optimization benchmark — realized speedups + direct-solver win
+- New page findings/optimization-benchmark.md: 100-sample before/after (original V1 vs each optimization), method descriptions, code changes, flag table.
+- Headline: forcing the direct solver (direct_solver=True) = 3.48x AND exact; the ndof<10000 auto-threshold is far too conservative for 2D (~40k DOF). Marked as the best solver + how to invoke.
+- Also benchmarked: #2 p-adaptivity 3.65x (needs direct solver), #3 coarse-far mesh 2.28x, #4 per-tool domain net loss.
+- Updated: findings/optimization-changes.md (Tasks 6/7/9 now done; benchmark-gap closed), concepts/fem-solver.md (direct-vs-CG finding + how to force), overview.md (open thread resolved), index.md.

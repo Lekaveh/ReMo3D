@@ -3,7 +3,7 @@ title: FEM Solver
 type: concept
 tags: [fem, ngsolve, cg, preconditioner, static-condensation, gpu, method]
 sources: [repo-docs]
-updated: 2026-07-15
+updated: 2026-07-16
 ---
 
 # FEM Solver
@@ -40,6 +40,15 @@ one assembled system serves many measurement solves.
 |---|---|
 | Small 2D (`ndof < 10000`) | cached **sparse Cholesky** direct inverse (reused across RHS) |
 | Larger / 3D | **CG** (`CGSolver`, `maxsteps=1000`) with a preconditioner |
+
+> ✅ **Benchmark finding: the `ndof < 10000` threshold is far too conservative for
+> 2D.** Production 2D meshes are ~40k DOF, so `"auto"` always falls back to CG.
+> Forcing the direct solver on those 20–45k-DOF systems is **3.48× faster than the
+> original *and* essentially exact** (vs CG's iterative error) — the single best
+> optimization found. See [optimization benchmark](../findings/optimization-benchmark.md).
+> Invoke with `simulate_logs(..., direct_solver=True)` (needs the symmetric SPD
+> form, which is the default); or raise `DIRECT_SOLVER_DOF_THRESHOLD`.
+> The `direct_solver` kwarg accepts `"auto"` / `True` (force) / `False`.
 
 - **Preconditioner**: `"multigrid"` (default — tens-to-low-hundreds of iters,
   scales with refinement) vs `"local"` (simpler; iters can drift into the

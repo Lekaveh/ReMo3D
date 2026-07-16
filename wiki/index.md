@@ -20,7 +20,8 @@ first for the synthesis, then drill into pages below. Updated on every ingest.
 - [numerical-stack.md](entities/numerical-stack.md) — Gmsh, Netgen, NGSolve, MPI and each one's role.
 
 ## Findings
-- [optimization-changes.md](findings/optimization-changes.md) — what changed on the `optim` branch to speed up the 2D solve path, and why (Tasks 0–8; which landed, which didn't).
+- [optimization-changes.md](findings/optimization-changes.md) — what changed on the `optim` branch to speed up the 2D solve path, and why (Tasks 0–9; all landed as of 2026-07-16).
+- [optimization-benchmark.md](findings/optimization-benchmark.md) — **realized** speedups (100 samples, original vs each optimization); forcing the direct solver = 3.48× and exact; four explored ideas + how to invoke the direct solver.
 - [doi-table.md](findings/doi-table.md) — per-tool radial & vertical depth-of-investigation at 90/95/99% (12 tools; homogeneous background).
 
 ## Sources

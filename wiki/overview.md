@@ -3,7 +3,7 @@ title: Overview & Synthesis
 type: overview
 tags: [synthesis, thesis]
 sources: [repo-docs]
-updated: 2026-07-15
+updated: 2026-07-16
 ---
 
 # ReMo3D Research Wiki — Overview
@@ -54,9 +54,11 @@ distilled here via [[repo-docs]]):
 
 ## Open threads
 
-- The `optim` branch already carries solver optimizations — captured in
-  [optimization changes](findings/optimization-changes.md) — but the realized
-  speedups are not yet **benchmarked/quantified**.
+- The `optim` branch's solver optimizations are now **benchmarked** (100 samples,
+  original vs each): [optimization benchmark](findings/optimization-benchmark.md).
+  Headline — **forcing the direct solver is 3.48× faster than the original *and*
+  more accurate**; its `ndof < 10000` auto-threshold is far too conservative for
+  2D (production ~40k DOF). Best single lever found.
 - Sensitivity analysis is active on the `optim` branch
   (`remo3d/sensitivity.py`, `Sensitivity.ipynb`) — no [findings/](findings/) page
   captures it yet.

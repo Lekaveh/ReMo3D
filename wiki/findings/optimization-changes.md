@@ -3,7 +3,7 @@ title: Optimization Changes (optim branch)
 type: finding
 tags: [optimization, performance, solver, optim-branch, changelog]
 sources: [repo-docs]
-updated: 2026-07-15
+updated: 2026-07-16
 ---
 
 # Optimization Changes — `optim` branch
@@ -32,10 +32,10 @@ are explicitly *directional, not guaranteed*.
 | **3** | Explicit CG `tol=1e-8` | Early termination once converged | ❌ **not implemented** (no `tol=` in final code) |
 | **4** | Expose `fe_order` through the API + MPI broadcast | Let users trade accuracy for fewer DOFs (order 2 vs 3) | ✅ done |
 | **5** | Direct `sparsecholesky` for small 2D systems | For ~1k–5k-DOF 2D meshes, factor-once/back-substitute beats iterative CG | ✅ done |
-| **6** | Vectorize Netgen boundary-point insertion | Remove O(n²) `np.vstack` in a loop | ❌ not implemented (`netgen_functions.py` untouched) |
-| **7** | Index-based boundary point lookup | Replace O(n·boundaries) float-equality scans | ❌ not implemented |
-| **8** | `domain_radius="auto"` sizing | Short-spaced tools don't need a 50 m domain | ✅ done (opt-in) |
-| **9** | Warn against GPU for 2D | GPU transfer overhead exceeds gains on small systems | ❌ not implemented |
+| **6** | Vectorize Netgen boundary-point insertion | Remove O(n²) `np.vstack` in a loop | ✅ done (`8e83c37`, verified mesh-identical to ~1e-14) |
+| **7** | Index-based boundary point lookup | Replace O(n·boundaries) float-equality scans | ✅ done (`8e83c37`, `np.unique` grouping; mesh-identical) |
+| **8** | `domain_radius="auto"` sizing | Short-spaced tools don't need a 50 m domain | ✅ done (opt-in) — but a **net loss** on suites with a long tool, see benchmark |
+| **9** | Warn against GPU for 2D | GPU transfer overhead exceeds gains on small systems | ✅ done (`8e83c37`, advisory in `initialize_workers`) |
 
 ## The changes that landed, in detail
 
@@ -89,18 +89,18 @@ numeric comparison). Default stays `50 m`. Flagged as opt-in because
 auto-sizing can change results on models with large invasion or thin beds near
 the boundary.
 
-## Not implemented — what's left for 2D
+## Update (2026-07-16): Tasks 6/7/9 landed + four new ideas benchmarked
 
-The remaining **2D-relevant** work is in mesh generation:
+Tasks **6, 7, 9** were implemented (`8e83c37`); 6 & 7 are pure Netgen-meshing
+refactors verified **mesh-identical** (DOF + apparent resistivity to ~1e-14).
+Four further exploratory optimizations (`dfa4b74`, env-toggled) were tried and
+measured — see [optimization benchmark](optimization-benchmark.md):
 
-- **Tasks 6 & 7 (Netgen meshing) — the real 2D gap.** `netgen_functions.py`
-  (the default 2D mesh generator) was never modified; the O(n²) boundary-point
-  `vstack` (Task 6) and float-equality boundary scans (Task 7) remain. Mesh
-  generation is the 2D bottleneck (~35–55% of wall time), so these are the
-  highest-value 2D items left. Task 6 is a safe pure refactor; Task 7 helps
-  mainly on many-layer models.
-- **Task 9 (2D GPU warning) — a guardrail, not a speedup.** No guard added, so a
-  user can still set `gpu_workers>0` for 2D and silently lose performance.
+- **#1 force the direct solver past the 10k-DOF threshold → 3.48× and exact.**
+  The biggest win by far; the threshold is too conservative for 2D.
+- **#2 p-adaptivity** (order-2 + order-3 near axis, direct solver) → 3.65×.
+- **#3 coarser far-field mesh** (×1.5) → 2.28×.
+- **#4 per-tool domain** → net loss (long tool inflates the domain).
 
 **Task 3 (CG `tol`) — dropped for the 2D case.** Typical 2D now uses the direct
 solver (Task 5), not CG, so an explicit CG tolerance is moot for the 2D path. It
@@ -111,9 +111,10 @@ for 2D optimization.
 
 ## Open threads
 
-- No recorded **benchmark numbers** from the harness yet — the "why" is
-  documented but the realized speedup is not quantified here. Running Task 0
-  baselines vs. optimized would give a real before/after and belongs on this page.
+- ~~No recorded benchmark numbers~~ **→ done:** realized before/after (100 samples,
+  original vs each optimization) is now quantified in
+  [optimization benchmark](optimization-benchmark.md). Headline: forcing the
+  direct solver = 3.48× and exact.
 - The [sensitivity analysis](../../remo3d/sensitivity.py) commit (`63f7694`) is
   separate work, not an optimization — it deserves its own findings page.
 
