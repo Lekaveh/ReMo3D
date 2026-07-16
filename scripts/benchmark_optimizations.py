@@ -83,6 +83,14 @@ VARIANTS = [
      "symmetric": True, "reuse_assembly": True, "direct_solver": "auto", "condense": True, "fe_order": 2, "domain_radius": "auto"},
     {"name": "Vb_order2_only", "desc": "baseline with ONLY fe_order=2 (T4 in isolation, all else off)",
      "symmetric": False, "reuse_assembly": False, "direct_solver": False, "condense": False, "fe_order": 2, "domain_radius": 40.0},
+    {"name": "Vd_direct_forced", "desc": "#1 force sparse-Cholesky direct solver on the large systems (V5 + direct=True)",
+     "symmetric": True, "reuse_assembly": True, "direct_solver": True, "condense": True, "fe_order": 3, "domain_radius": 40.0},
+    {"name": "Vm_coarse_far", "desc": "#3 coarser far-field mesh (env REMO3D_FAR_MESH_FACTOR); solver = V4 (CG+condense) to isolate the mesh effect",
+     "symmetric": True, "reuse_assembly": True, "direct_solver": False, "condense": True, "fe_order": 3, "domain_radius": 40.0},
+    {"name": "Vp_padaptive", "desc": "#2 p-adaptivity: base order 2 + order 3 near borehole (env REMO3D_PADAPT_RADIUS); direct solver (variable order needs the direct path, CG+multigrid fails)",
+     "symmetric": True, "reuse_assembly": True, "direct_solver": True, "condense": True, "fe_order": 2, "domain_radius": 40.0},
+    {"name": "Vt_per_tool_domain", "desc": "#4 per-tool domain (env REMO3D_PER_TOOL_DOMAIN); solver = V5",
+     "symmetric": True, "reuse_assembly": True, "direct_solver": "auto", "condense": True, "fe_order": 3, "domain_radius": 40.0},
 ]
 VARIANTS_BY_NAME = {v["name"]: v for v in VARIANTS}
 BASELINE_NAME = "V1_baseline"

@@ -97,21 +97,28 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
             tool_geometry = tool[0,:]
             source_terms = tool[1,:]
 
+            # #4 per-tool domain (env REMO3D_PER_TOOL_DOMAIN): size the simulation domain
+            # to THIS task's tool geometry instead of the global domain, so short tools get
+            # small meshes. Falls back to the global domain_radius when unset.
+            task_domain_radius = domain_radius
+            if os.environ.get("REMO3D_PER_TOOL_DOMAIN", "") not in ("", "0"):
+                task_domain_radius = max(10.0 * float(np.max(np.abs(tool_geometry))), 5.0)
+
             if mesh_generator=="gmsh":
                 # Carve out suitable range of data
-                local_formation_geometry, local_borehole_geometry, sigma = gmf.SelectGmshDataRange(borehole_geometry, formation_parameters, dip, mud_resistivities[depth_index], simulation_depths[depth_index], domain_radius)
+                local_formation_geometry, local_borehole_geometry, sigma = gmf.SelectGmshDataRange(borehole_geometry, formation_parameters, dip, mud_resistivities[depth_index], simulation_depths[depth_index], task_domain_radius)
                 # Create geometry and mesh
                 if dip==0:
-                    mesh = gmf.ConstructGmsh2dModel(domain_radius, tool_geometry, source_terms, local_formation_geometry, local_borehole_geometry, rank, mesh_generator)
+                    mesh = gmf.ConstructGmsh2dModel(task_domain_radius, tool_geometry, source_terms, local_formation_geometry, local_borehole_geometry, rank, mesh_generator)
                 else:
-                    mesh = gmf.ConstructGmsh3dModel(domain_radius, tool_geometry, source_terms, local_formation_geometry, dip, local_borehole_geometry, rank)
+                    mesh = gmf.ConstructGmsh3dModel(task_domain_radius, tool_geometry, source_terms, local_formation_geometry, dip, local_borehole_geometry, rank)
                 dirichlet_boundary = 'dirichlet_boundary'
             # Generate mesh using netgen
             elif mesh_generator=="netgen":
                 # Carve out suitable range of data
-                local_formation_geometry, local_borehole_geometry, sigma = ngf.SelectNetgenDataRange(borehole_geometry, formation_parameters, mud_resistivities[depth_index], simulation_depths[depth_index], domain_radius)
+                local_formation_geometry, local_borehole_geometry, sigma = ngf.SelectNetgenDataRange(borehole_geometry, formation_parameters, mud_resistivities[depth_index], simulation_depths[depth_index], task_domain_radius)
                 # Create geometry and mesh
-                mesh = ngf.ConstructNetgen2dModel(domain_radius, tool_geometry, source_terms, local_formation_geometry, local_borehole_geometry)
+                mesh = ngf.ConstructNetgen2dModel(task_domain_radius, tool_geometry, source_terms, local_formation_geometry, local_borehole_geometry)
                 dirichlet_boundary = [2]
 
             # Convert data to ngsolve format

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os
 import numpy as np
 import ngsolve as ngs
 import time
@@ -125,6 +126,21 @@ def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, or
     model_dimensionality = mesh.dim
 
     fes = ngs.H1(mesh, order=order, dirichlet=dirichlet_boundary, autoupdate=True)
+
+    # #2 p-adaptivity (env REMO3D_PADAPT_RADIUS, meters): keep the base `order` far away
+    # but raise it by one near the borehole axis (small radial coord x), where the tool
+    # measures and sharp resistivity boundaries drive the low-order error. 0 = off.
+    padapt_radius = float(os.environ.get("REMO3D_PADAPT_RADIUS", "0") or 0)
+    if padapt_radius > 0 and model_dimensionality == 2:
+        raised = 0
+        for el in mesh.Elements(ngs.VOL):
+            cx = sum(mesh[vtx].point[0] for vtx in el.vertices) / len(el.vertices)
+            if cx < padapt_radius:
+                fes.SetOrder(ngs.NodeId(ngs.ELEMENT, el.nr), order + 1)
+                raised += 1
+        if raised:
+            fes.UpdateDofTables()
+
     u = fes.TrialFunction()
     v = fes.TestFunction()
 

@@ -1,9 +1,20 @@
 # -*- coding: utf-8 -*-
 
+import os
 import gmsh
 import numpy as np
 import scipy.interpolate as spi
 import netgen.meshing as msh
+
+
+def _far_mesh_factor():
+    """Optional far-field mesh coarsening factor (#3), controlled by the environment
+    so it needs no plumbing through the MPI pipeline. 1.0 = unchanged; larger grows
+    the radial mesh size faster far from the axis -> coarser far field, fewer DOF."""
+    try:
+        return max(1e-6, float(os.environ.get("REMO3D_FAR_MESH_FACTOR", "1.0")))
+    except (TypeError, ValueError):
+        return 1.0
 
 # GMSH functions
 
@@ -484,10 +495,11 @@ def ConstructGmsh2dModel(domain_radius, tool_geometry, source_terms, formation_g
     gmsh.model.occ.removeAllDuplicates()        
     gmsh.model.occ.synchronize()
 
+    far_factor = _far_mesh_factor()  # #3: far-field coarsening (env REMO3D_FAR_MESH_FACTOR)
     gmsh.model.mesh.field.add("MathEval", 1) # Horizontal, linear meshsize field
-    gmsh.model.mesh.field.setString(1, "F", "x + 0.1")
+    gmsh.model.mesh.field.setString(1, "F", "{}*x + 0.1".format(far_factor))
     fields = [1]
-    
+
     i = 2
     for electrode_position in tool_geometry[source_terms != 0]:
         gmsh.model.mesh.field.add("MathEval", i) # Meshsize field modification near current electrodes
