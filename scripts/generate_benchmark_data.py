@@ -1132,6 +1132,9 @@ def generate_data(
     transition_probs=None,
     lambda_space=None,
     seed=None,
+    base=25.6,
+    dz=0.2,
+    top=0.0,
 ):
     """Generate ``sample_end - sample_start`` realizations, plotting the first ``plot_count``.
 
@@ -1174,6 +1177,9 @@ def generate_data(
                     output_root=output_root,
                     folder_name=folder_name,
                     eps=0.4,
+                    top=top,
+                    base=base,
+                    DZ=dz,
                     plot_fig=(i_sample - sample_start) < plot_count,
                 )
                 print(f"[generate_data] sample {i_sample} OK")
@@ -1205,7 +1211,8 @@ def _default_transition_probs():
     )
 
 
-def build_stages(sample_end=10, cpu_workers=16, plot_count=0, output_root=DEFAULT_OUTPUT_ROOT, sample_start=0):
+def build_stages(sample_end=10, cpu_workers=16, plot_count=0, output_root=DEFAULT_OUTPUT_ROOT, sample_start=0,
+                 base=25.6, dz=0.2):
     """Return the stage-configuration dict, parameterized for a benchmark-sized run."""
     common = dict(
         tools=list(DEFAULT_TOOLS),
@@ -1214,6 +1221,8 @@ def build_stages(sample_end=10, cpu_workers=16, plot_count=0, output_root=DEFAUL
         sample_start=sample_start,
         sample_end=sample_end,
         cpu_workers=cpu_workers,
+        base=base,
+        dz=dz,
     )
     return {
         "smooth_noise": {
@@ -1273,6 +1282,10 @@ def parse_args(argv=None):
                         help=f"Root output directory. Default: {DEFAULT_OUTPUT_ROOT}.")
     parser.add_argument("--seed", type=int, default=None,
                         help="Base RNG seed for reproducible sampling. Default: nondeterministic.")
+    parser.add_argument("--base", type=float, default=25.6,
+                        help="Well/formation length in metres (top=0). (base-top) must be divisible by --dz. Default: 25.6.")
+    parser.add_argument("--dz", type=float, default=0.2,
+                        help="Depth step / cell size in metres. Default: 0.2.")
     return parser.parse_args(argv)
 
 
@@ -1291,6 +1304,8 @@ def main(argv=None):
     stages = build_stages(
         sample_end=args.sample_start + args.n_samples,
         cpu_workers=args.cpu_workers,
+        base=args.base,
+        dz=args.dz,
         plot_count=min(args.plot_count, args.n_samples),
         output_root=args.output_root,
         sample_start=args.sample_start,
