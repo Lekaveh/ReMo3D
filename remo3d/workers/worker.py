@@ -7,6 +7,7 @@ import ngsolve as ngs
 
 import sys
 import os
+import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import gmsh_functions as gmf
@@ -55,6 +56,10 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
     preconditioner = str()
     condense = bool()
     fe_order = int()
+    symmetric = bool()
+    reuse_assembly = bool()
+    direct_solver = None
+    collect_metrics = bool()
     task_list = list()
 
     # Fill variables with data
@@ -69,15 +74,24 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
     preconditioner = comm.bcast(preconditioner, root=0)
     condense = comm.bcast(condense, root=0)
     fe_order = comm.bcast(fe_order, root=0)
+    # New optimization-toggle flags (must match the master's broadcast order in
+    # remo3d.py simulate_logs; task_list stays LAST on both sides).
+    symmetric = comm.bcast(symmetric, root=0)
+    reuse_assembly = comm.bcast(reuse_assembly, root=0)
+    direct_solver = comm.bcast(direct_solver, root=0)
+    collect_metrics = comm.bcast(collect_metrics, root=0)
     task_list = comm.bcast(task_list, root=0)
 
     ## Wait for all workers to receive data
     comm.barrier()
 
     results = list()
+    task_metrics = list()
     for lvl_2_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
         task = task_list[lvl_2_msg]
         try:
+            if collect_metrics:
+                task_t0 = time.perf_counter()
             depth_index = task[0]
             tool = task[1]
             tool_geometry = tool[0,:]
@@ -104,8 +118,25 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
             mesh = ngs.Mesh(mesh)
             sigma = ngs.CoefficientFunction(sigma)
 
-            ## Assemble stiffness matrix and preconditioner once for this batch
-            fes, a, c, inv = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=fe_order)
+            ## Assemble + solve. reuse_assembly=True (Task 2): assemble the matrix and
+            ## preconditioner/factorization once per mesh, reuse across all RHS in the
+            ## batch. reuse_assembly=False: re-assemble per RHS (original behavior).
+            task_dofs_total = task_dofs_free = task_solver_type = task_cg_iters = None
+            task_assembly_time = 0.0
+            task_solve_time = 0.0
+            n_solves = 0
+
+            if reuse_assembly:
+                if collect_metrics:
+                    fes, a, c, inv, am = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense,
+                                                             order=fe_order, symmetric=symmetric, direct_solver=direct_solver,
+                                                             return_metrics=True)
+                    task_dofs_total, task_dofs_free = am["dofs_total"], am["dofs_free"]
+                    task_solver_type = am["solver_type"]
+                    task_assembly_time += sum(am["timings"].values())
+                else:
+                    fes, a, c, inv = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense,
+                                                         order=fe_order, symmetric=symmetric, direct_solver=direct_solver)
 
             ## Compute measured resistivity
             for modelling_task in task[2]:
@@ -113,8 +144,27 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
                 tool_geometry = tool[0,:]
                 source_terms = tool[1,:]
 
+                if not reuse_assembly:
+                    if collect_metrics:
+                        fes, a, c, inv, am = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense,
+                                                                 order=fe_order, symmetric=symmetric, direct_solver=direct_solver,
+                                                                 return_metrics=True)
+                        task_dofs_total, task_dofs_free = am["dofs_total"], am["dofs_free"]
+                        task_solver_type = am["solver_type"]
+                        task_assembly_time += sum(am["timings"].values())
+                    else:
+                        fes, a, c, inv = ngsf.AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense,
+                                                             order=fe_order, symmetric=symmetric, direct_solver=direct_solver)
+
                 ## Solve BVP for this right-hand side
-                fes, gfu = ngsf.SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense)
+                if collect_metrics:
+                    fes, gfu, sm = ngsf.SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metrics=True)
+                    task_solve_time += sum(sm["timings"].values())
+                    if sm.get("cg_iterations") is not None:
+                        task_cg_iters = sm["cg_iterations"]
+                else:
+                    fes, gfu = ngsf.SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense)
+                n_solves += 1
 
                 # Compute resistivity values
                 for rc_task in modelling_task[2]:
@@ -139,6 +189,21 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
 
                     # Append result to results
                     results.append([rc_task[0], rc_task[1], result])
+
+            if collect_metrics:
+                task_metrics.append({
+                    "rank": rank,
+                    "task_index": int(lvl_2_msg),
+                    "n_solves": int(n_solves),
+                    "wall": time.perf_counter() - task_t0,
+                    "assembly_time": float(task_assembly_time),
+                    "solve_time": float(task_solve_time),
+                    "dofs_total": task_dofs_total,
+                    "dofs_free": task_dofs_free,
+                    "solver_type": task_solver_type,
+                    "cg_iterations": task_cg_iters,
+                    "reuse_assembly": bool(reuse_assembly),
+                })
         except Exception:
             if WORKER_DEBUG:
                 raise
@@ -149,6 +214,11 @@ for lvl_1_msg in iter(lambda: comm.sendrecv(None, dest=0), StopIteration):
     # Report results to master process
     comm.barrier()
     comm.gather(sendobj=results, root=0)
+
+    # Report per-task metrics when requested. This gather is collective and gated
+    # by the same broadcast flag on master and workers, so it stays symmetric.
+    if collect_metrics:
+        comm.gather(sendobj=task_metrics, root=0)
 
 ## Shutdown
 comm.Disconnect()

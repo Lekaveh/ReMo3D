@@ -105,9 +105,20 @@ def _condensed_solve(a, inv, f, fes, condense, rhs_vector_factory=None):
 
     return gfu
 
-def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=3, return_metrics=False):
-    """Assemble the stiffness matrix and reusable solver data once per mesh/sigma pair."""
+def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=3,
+                   symmetric=True, direct_solver="auto", return_metrics=False):
+    """Assemble the stiffness matrix and reusable solver data once per mesh/sigma pair.
+
+    Optimization toggles (defaults reproduce the current optimized behavior):
+      symmetric      -- assemble a symmetric (SPD) bilinear form (Task 1). False
+                        gives the original non-symmetric assembly.
+      direct_solver  -- "auto": use the sparse-Cholesky direct solver for small 2D
+                        systems (Task 5); True: force the direct solver (2D only,
+                        requires symmetric=True); False: always use multigrid/CG.
+    """
     order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
+    if isinstance(direct_solver, np.bool_):
+        direct_solver = bool(direct_solver)
 
     timings = {}
     setup_started = time.perf_counter()
@@ -117,7 +128,7 @@ def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, or
     u = fes.TrialFunction()
     v = fes.TestFunction()
 
-    a = ngs.BilinearForm(fes, symmetric=True, condense=condense)
+    a = ngs.BilinearForm(fes, symmetric=symmetric, condense=condense)
 
     if model_dimensionality==2:
         a += 2*np.pi*ngs.grad(u)*ngs.grad(v)*ngs.x*sigma*ngs.dx
@@ -125,7 +136,18 @@ def AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, or
         a += ngs.grad(u)*ngs.grad(v)*sigma*ngs.dx
     timings["setup"] = time.perf_counter() - setup_started
 
-    use_direct = model_dimensionality == 2 and fes.ndof < DIRECT_SOLVER_DOF_THRESHOLD
+    if direct_solver == "auto":
+        use_direct = (model_dimensionality == 2
+                      and fes.ndof < DIRECT_SOLVER_DOF_THRESHOLD
+                      and symmetric)
+    elif direct_solver is True:
+        if not symmetric:
+            raise ValueError("direct_solver=True requires symmetric=True (sparsecholesky needs an SPD matrix)")
+        use_direct = model_dimensionality == 2
+    elif direct_solver is False:
+        use_direct = False
+    else:
+        raise ValueError('direct_solver must be "auto", True, or False')
 
     c = None
     if not use_direct:
@@ -183,8 +205,13 @@ def SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metri
     return fes, gfu
 
 
-def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, order=3, return_metrics=False):
-    """Original API preserved for backward compatibility."""
+def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preconditioner, condense, order=3,
+             symmetric=True, direct_solver="auto", return_metrics=False):
+    """Original API preserved for backward compatibility.
+
+    ``symmetric`` and ``direct_solver`` expose the Task 1 / Task 5 optimizations
+    for ablation benchmarking; their defaults reproduce the optimized behavior.
+    """
     order, return_metrics = _normalize_order_and_metrics(order, return_metrics)
 
     if return_metrics:
@@ -195,6 +222,8 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
             preconditioner,
             condense,
             order=order,
+            symmetric=symmetric,
+            direct_solver=direct_solver,
             return_metrics=True,
         )
         fes, gfu, solve_metrics = SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense, return_metrics=True)
@@ -205,5 +234,6 @@ def SolveBVP(mesh, sigma, tool_geometry, source_terms, dirichlet_boundary, preco
         metrics["solver_type"] = assemble_metrics["solver_type"]
         return fes, gfu, metrics
 
-    fes, a, c, inv = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order)
+    fes, a, c, inv = AssembleSystem(mesh, sigma, dirichlet_boundary, preconditioner, condense, order=order,
+                                    symmetric=symmetric, direct_solver=direct_solver)
     return SolveRHS(fes, a, c, inv, tool_geometry, source_terms, condense)

@@ -204,18 +204,24 @@ def ConstructNetgen2dModel(domain_radius, tool_geometry, source_terms, formation
     points_to_add = np.floor(angles_betweeen_existing_points/(9*np.pi/180)).astype(int) # number of points that will be added between existing points
 
     starting_index = index_0D
-    points_at_domain_boundary = existing_points_at_domain_boundary[0,:]
+    # Task 6: collect the domain-boundary point segments and vstack once, instead of
+    # np.vstack-ing inside the loop (which reallocated the whole array every iteration,
+    # an O(n^2) pattern). Row order is preserved exactly: existing[0], then for each i
+    # the additional points followed by existing[i+1].
+    domain_boundary_segments = [existing_points_at_domain_boundary[0:1, :]]
     for i in range(np.shape(points_to_add)[0]):
         if points_to_add[i] > 0:
             index = np.array([0, points_to_add[i]+1])
             angle = np.array([existing_points_at_domain_boundary[i,2], existing_points_at_domain_boundary[i+1,2]])
             interpolated_angles = np.interp(np.arange(points_to_add[i])+1, index, angle)
             additional_points = np.vstack([np.arange(points_to_add[i]) + index_0D, np.full(points_to_add[i], domain_radius), interpolated_angles]).T
-            points_at_domain_boundary = np.vstack([points_at_domain_boundary, additional_points, existing_points_at_domain_boundary[i+1,:]])
+            domain_boundary_segments.append(additional_points)
+            domain_boundary_segments.append(existing_points_at_domain_boundary[i+1:i+2, :])
             index_0D += points_to_add[i]
         else:
-            points_at_domain_boundary = np.vstack([points_at_domain_boundary, existing_points_at_domain_boundary[i+1,:]])
-    
+            domain_boundary_segments.append(existing_points_at_domain_boundary[i+1:i+2, :])
+    points_at_domain_boundary = np.vstack(domain_boundary_segments)
+
     points_at_domain_boundary[:,1], points_at_domain_boundary[:,2] = domain_radius*np.cos(points_at_domain_boundary[:,2]), domain_radius*np.sin(points_at_domain_boundary[:,2])
     new_points_at_domain_boundary = points_at_domain_boundary[points_at_domain_boundary[:,0]>=starting_index,:]
     points = np.vstack([points, new_points_at_domain_boundary])
@@ -244,9 +250,19 @@ def ConstructNetgen2dModel(domain_radius, tool_geometry, source_terms, formation
 
     ## Add horizontal lines
     # Add lines at layers boundaries
+    # Task 7: group the r>0 points by their exact z-value once, then index each
+    # boundary by z, instead of scanning the whole points array for every boundary.
+    positive_r_rows = np.flatnonzero(points[:, 1] > 0)
+    positive_r_z = points[positive_r_rows, 2]
+    unique_z, z_inverse = np.unique(positive_r_z, return_inverse=True)
+    z_sort_order = np.argsort(z_inverse, kind="stable")
+    z_row_groups = np.split(positive_r_rows[z_sort_order],
+                            np.searchsorted(z_inverse[z_sort_order], np.arange(1, len(unique_z))))
+    z_to_boundary_rows = {float(unique_z[k]): z_row_groups[k] for k in range(len(unique_z))}
+
     number_of_lines_at_boundary = np.empty_like(boundaries_z)
     for i in range(np.shape(number_of_lines_at_boundary)[0]):
-        number_of_lines_at_boundary[i] = np.sum(np.all([points[:,2]==boundaries_z[i], points[:,1] > 0], axis=0)) - 1
+        number_of_lines_at_boundary[i] = len(z_to_boundary_rows.get(float(boundaries_z[i]), ())) - 1
     number_of_lines = int(np.sum(number_of_lines_at_boundary))
 
     areas_above_boundary = np.vstack((formation_geometry[:-1,3], np.full_like(formation_geometry[:-1,3], np.nan).T, formation_geometry[:-1,4])).T
@@ -265,7 +281,8 @@ def ConstructNetgen2dModel(domain_radius, tool_geometry, source_terms, formation
 
     j = 0
     for i in range(np.shape(boundaries_z[1:-1])[0]):
-        points_at_ith_boundary = points[np.all([points[:,2]==boundaries_z[1:-1][i], points[:,1] > 0], axis=0), :]
+        boundary_rows = z_to_boundary_rows.get(float(boundaries_z[1:-1][i]), np.empty(0, dtype=int))
+        points_at_ith_boundary = points[boundary_rows, :]
         points_at_ith_boundary = points_at_ith_boundary[np.argsort(points_at_ith_boundary[:,1]),:]
         if np.shape(points_at_ith_boundary)[0] == 2:
             lines_at_boundaries[j,[1,2,4,5]] = [points_at_ith_boundary[0,0], points_at_ith_boundary[1,0], areas_below_boundary[i,2], areas_above_boundary[i,0]]

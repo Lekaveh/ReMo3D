@@ -81,7 +81,11 @@ class Model():
         mesh_generator="auto",
         preconditioner="multigrid",
         condense=True,
-        fe_order=3):
+        fe_order=3,
+        symmetric=True,
+        reuse_assembly=True,
+        direct_solver="auto",
+        collect_metrics=False):
         """
         This function performs complete moddeling procedure.
         
@@ -176,7 +180,8 @@ class Model():
 
         model.initialize_workers(cpu_workers=cpu_workers, gpu_workers=gpu_workers)
 
-        model.simulate_logs(measurement_depths, domain_radius=domain_radius, batch_size=batch_size, mesh_generator=mesh_generator, preconditioner=preconditioner, condense=condense, fe_order=fe_order)
+        model.simulate_logs(measurement_depths, domain_radius=domain_radius, batch_size=batch_size, mesh_generator=mesh_generator, preconditioner=preconditioner, condense=condense, fe_order=fe_order,
+                             symmetric=symmetric, reuse_assembly=reuse_assembly, direct_solver=direct_solver, collect_metrics=collect_metrics)
 
         model.shutdown_workers()
         
@@ -580,7 +585,15 @@ class Model():
                 import ngsolve.ngscuda
             except:
                 print ("No CUDA library or device available. The number of gpu processes is set to 0")
-                gpu_workers = 0    
+                gpu_workers = 0
+
+        ## Warn if GPU workers were requested for a 2D (dip=0) model, where the GPU
+        ## solver gives no benefit over the CPU direct/iterative path (Task 9). Advisory
+        ## only; honours the request. dip_deg is set by set_model_parameters, so this
+        ## fires only when the model is already known to be 2D (e.g. compute_synthetic_logs).
+        if gpu_workers > 0 and getattr(self, "dip_deg", None) is not None and np.isclose(self.dip_deg, 0):
+            print("Warning: GPU acceleration provides no benefit for 2D (dip=0) models. "
+                  "Consider setting gpu_workers=0. Proceeding with GPU workers as requested.")
 
         ## Specify number of workers
         if type(cpu_workers) != int or type(gpu_workers) != int:
@@ -729,7 +742,8 @@ class Model():
         return borehole_parameters
     
     
-    def simulate_logs(self, measurement_depths, domain_radius=50, batch_size=5, mesh_generator="auto", preconditioner="multigrid", condense=True, fe_order=3):
+    def simulate_logs(self, measurement_depths, domain_radius=50, batch_size=5, mesh_generator="auto", preconditioner="multigrid", condense=True, fe_order=3,
+                      symmetric=True, reuse_assembly=True, direct_solver="auto", collect_metrics=False):
         """
         This function prepares data, dispatches tasks to workers, gathers and assembles generated synthetic logs.
         
@@ -763,6 +777,25 @@ class Model():
         fe_order: int, optional
             Polynomial order of the H1 finite element space.
             By default set to 3.
+
+        symmetric: bool, optional
+            Assemble a symmetric (SPD) bilinear form (Task 1 optimization). Set
+            False for the original non-symmetric assembly. By default set to True.
+
+        reuse_assembly: bool, optional
+            Assemble the system once per mesh and reuse it across the batch's
+            right-hand sides (Task 2 optimization). Set False to re-assemble per
+            RHS (original behavior). By default set to True.
+
+        direct_solver: {"auto", True, False}, optional
+            "auto" uses the sparse-Cholesky direct solver for small 2D systems
+            (Task 5 optimization); True forces it (2D only, requires
+            symmetric=True); False always uses the multigrid/CG solver.
+            By default set to "auto".
+
+        collect_metrics: bool, optional
+            Gather per-task solver metrics (wall time, DOF counts, solver type,
+            CG iterations) into ``self.task_metrics``. By default set to False.
         """
         ### Start the clock
         start_time = datetime.datetime.now()
@@ -777,6 +810,24 @@ class Model():
 
         if type(fe_order) != int or fe_order < 1:
             raise ValueError("The finite element order has to be a positive integer")
+
+        ## Optimization-toggle flags. Validate on the master BEFORE any broadcast so a
+        ## bad configuration fails fast instead of desyncing / deadlocking the workers.
+        if isinstance(direct_solver, np.bool_):
+            direct_solver = bool(direct_solver)
+        if not isinstance(symmetric, (bool, np.bool_)):
+            raise ValueError("symmetric has to be a bool")
+        if not isinstance(reuse_assembly, (bool, np.bool_)):
+            raise ValueError("reuse_assembly has to be a bool")
+        if not isinstance(collect_metrics, (bool, np.bool_)):
+            raise ValueError("collect_metrics has to be a bool")
+        if direct_solver not in ("auto", True, False):
+            raise ValueError('direct_solver has to be "auto", True, or False')
+        if direct_solver is True and not symmetric:
+            raise ValueError("direct_solver=True requires symmetric=True (sparsecholesky needs an SPD matrix)")
+        symmetric = bool(symmetric)
+        reuse_assembly = bool(reuse_assembly)
+        collect_metrics = bool(collect_metrics)
 
         ## Model
         # Simulation domain
@@ -860,6 +911,12 @@ class Model():
         self.comm.bcast(preconditioner, root=MPI.ROOT)
         self.comm.bcast(condense, root=MPI.ROOT)
         self.comm.bcast(fe_order, root=MPI.ROOT)
+        # New optimization-toggle flags. The order here MUST match worker.py's recv
+        # block exactly; task_list stays LAST on both sides.
+        self.comm.bcast(symmetric, root=MPI.ROOT)
+        self.comm.bcast(reuse_assembly, root=MPI.ROOT)
+        self.comm.bcast(direct_solver, root=MPI.ROOT)
+        self.comm.bcast(collect_metrics, root=MPI.ROOT)
         self.comm.bcast(task_list, root=MPI.ROOT)
 
         ## Wait for all workers to receive data
@@ -891,6 +948,14 @@ class Model():
         # Gather results from workers
         list_of_results = [item for sublist in self.comm.gather(None, root=MPI.ROOT) for item in sublist]
 
+        # Gather per-task solver metrics when requested. This gather is collective and
+        # gated by the same flag broadcast to workers, so it stays symmetric.
+        if collect_metrics:
+            gathered_metrics = self.comm.gather(None, root=MPI.ROOT)
+            self.task_metrics = [m for sublist in gathered_metrics for m in sublist]
+        else:
+            self.task_metrics = None
+
         ## Format and sort results
         results = np.empty([len(measurement_depths_list), len(tool_list)])
         for result in list_of_results:
@@ -905,7 +970,9 @@ class Model():
             shutil.rmtree("./tmp")
 
         ### Report time of computation
-        print('\nProcessed in: ', datetime.datetime.now() - start_time)
+        elapsed = datetime.datetime.now() - start_time
+        print('\nProcessed in: ', elapsed)
+        self.wall_time = elapsed.total_seconds()
 
         # Save logs
         self.logs = logs
