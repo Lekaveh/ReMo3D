@@ -85,14 +85,45 @@ conventions:
    radial truncation knob (`domain_radius`) affects v2 and the references
    alike; the full saturation study is still open (E2 residual).
 
-## Verdict for the fork
+## Phase G1 — GPU port: gate PASSED, ×5.5 over v1
 
-**Global path: GO** (pending the GPU-timing milestone). Memory trivial,
-RHS amortization ×2.41 on top of factor-once, discretization at parity with
-v1, and the accuracy differences are understood and favor v2's conventions.
-Next: JAX `lax.scan` port of the global block-Thomas (reuse `direct.py`
-machinery) with `vmap` over samples; then the boundary-saturation study and
-the production decision on the mud convention.
+`global_gpu.py`: the whole per-sample pipeline in one jitted function —
+σ (z-varying mud, jnp) → face conductances → block rows → **factor
+`lax.scan`** (dense Schur Cholesky per z-row) → **two solve scans** with all
+531 RHS columns at once → axis potentials; `vmap` over samples.
+
+Precision (measured on the len512 shared grid, A6000):
+
+| Mode | Correctness | s/sample (B=1) |
+|---|---|--:|
+| fp64 | 4.9e-11 vs CPU control | 18.3 (factor 7.5 + solve 10.8) |
+| pure fp32 | **NaN** — Schur recursion loses SPD at row ~2153 of 12313, Jacobi scaling doesn't save it (v1's 341-row windows were below the cliff) | — |
+| **mixed** (fp64 recursion → fp32 factors + fp32 solves, Jacobi-scaled) | Ra error **4.0e-5** | 9.9 |
+
+Both stages are **latency-bound** (fp64 factor is ~17 ms of pure flops in
+7.5 s of wall — it's 12313 sequential scan steps), so sample-batching is
+almost free: batch wall time stays ~10–11 s while per-sample cost divides.
+
+| Batch B | warm s/sample | vs v1 (7.65 s) | vs CPU pipeline (~40 s) |
+|--:|--:|--:|--:|
+| 1 | 9.87 | ×0.8 | ×4 |
+| 4 | 2.58 | ×3.0 — **gate <3.06 s PASS** | ×15.5 |
+| 8 | **1.40** | **×5.5** | **×28.6** |
+
+B is memory-bound by the forward-sweep stack (~3 GB/sample fp32 at k=544);
+B=8 uses ~32 GB of the 48 GB card. Compile is paid once (~20 s). Combined
+with Phase 0: the deep-research report's central bet is **confirmed
+end-to-end** — the ×5.2 "ceiling" of v1 falls to an architecture change on
+the same hardware, with no CUDA C++ and no new toolchain.
+
+## Verdict
+
+**Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS
+amortization ×2.41 on top of factor-once, discretization at parity with v1,
+accuracy differences understood (and favor v2), and the GPU implementation
+beats the gate by ×2.2. Remaining for production (G2+): boundary-saturation
+study, mud-convention decision, multi-GPU sharding by sample batches,
+validation ladder + regression gates, energy/sample logging.
 
 ## Links
 

@@ -68,10 +68,11 @@ distilled here via [[repo-docs]]):
   block-Thomas) reached **×5.2** and hit a small-block factorization wall
   ([`../WORK_SUMMARY.md`](../WORK_SUMMARY.md)). The ingested
   [[deep-research-gpu-solver]] report argued the wall is architectural, not
-  hardware — and the Phase 0 experiments **confirmed the global
-  factor-once/solve-many path: GO**
-  ([findings/gpu-solver-v2.md](findings/gpu-solver-v2.md)). Next: the JAX
-  scan port + boundary study per
+  hardware — and Phase 0 + the G1 GPU port **confirmed it end-to-end:
+  1.40 s/sample (×5.5 over v1, ×28.6 over the CPU pipeline)** with mixed
+  precision (fp64 Schur recursion → fp32 solves)
+  ([findings/gpu-solver-v2.md](findings/gpu-solver-v2.md)). Remaining:
+  boundary study, mud-convention decision, production hardening per
   [`../GPU_SOLVER_V2_PLAN.md`](../GPU_SOLVER_V2_PLAN.md).
 - Only one **external** source ingested so far ([[deep-research-gpu-solver]],
   LLM-generated) — physics/method pages still cite mostly [[repo-docs]] and want

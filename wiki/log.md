@@ -87,3 +87,17 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   64-thread OpenBLAS on 111×111 blocks >10× slower (pin to 1, again).
 - pages touched: findings/gpu-solver-v2.md (new), index.md, overview.md;
   repo: remo3d/gpu_solver/global_op.py, scripts/gpu_v2_*.py, v1 core ported.
+
+## [2026-07-17] finding | GPU solver v2 G1 — gate PASSED, x5.5 over v1
+- global_gpu.py: whole pipeline (sigma zmud -> assembly -> factor lax.scan ->
+  2 solve scans, 531 RHS at once) in one jit, vmap over samples.
+- Precision: fp64 exact (4.9e-11 vs CPU control); pure fp32 recursion NaNs at
+  row ~2153/12313 (SPD loss; Jacobi scaling insufficient; v1's 341-row windows
+  were below the cliff); MIXED (fp64 recursion -> fp32 factors+solves) gives
+  Ra err 4e-5.
+- Throughput (A6000, warm): B=1 9.87 s/sample; B=4 2.58 (gate <3.06 PASS);
+  B=8 1.40 -> x5.5 vs v1 GPU, x28.6 vs CPU pipeline. Latency-bound scans ->
+  batch almost free; B memory-bound (~3 GB/sample fp32 forward stack).
+- pages touched: findings/gpu-solver-v2.md (G1 section + verdict), index.md,
+  overview.md; repo: remo3d/gpu_solver/global_gpu.py,
+  scripts/gpu_v2_global_gpu_bench.py, global_op.py refactor (build_global_tasks).

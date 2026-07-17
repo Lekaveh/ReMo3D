@@ -186,19 +186,14 @@ def _node_indices(z_nodes, coords, tol=1e-6):
     return j
 
 
-def build_global_problem(tools, depths, formation, borehole, h_min=None,
-                         domain_radius=None, growth=1.15, fine_margin=0.5,
-                         subsample=4):
-    """Global grid + explicit operator + per-(tool, depth) task indexing.
+def build_global_tasks(tools, depths, formation, borehole, h_min=None,
+                       domain_radius=None, growth=1.15, fine_margin=0.5):
+    """Sample-independent part of the global problem: grid + task indexing.
 
-    One grid for ALL tools (v2 "variant b"): axial spacing = the finest tool
-    h_min, radius = the largest tool auto-R (v1 conventions: h_min from
-    tool.default_h_min, R = max(10*span, 5)). Pass a single-tool list for the
-    per-tool "variant a".
-
-    Returns a dict with the grid, sigma, A (CSR on free nodes), band metadata,
-    and per-tool task arrays in FREE numbering: src/M/N node ids per depth,
-    plus the deduplicated source-column table (unique src -> column).
+    The grid depends only on (tools, depths) — canonical radial nodes and the
+    lattice-snapped z plateau — so it is IDENTICAL across samples; formation /
+    borehole are only used for σ later. Returns the dict skeleton shared by
+    the CPU (build_global_problem) and GPU (global_gpu) paths.
     """
     cfgs = {t: gtool.tool_config(t) for t in tools}
     if h_min is None:
@@ -220,9 +215,9 @@ def build_global_problem(tools, depths, formation, borehole, h_min=None,
     r_nodes = ggrid.canonical_radial_nodes(float(domain_radius),
                                            max(h_min, 1e-2), growth=growth)
 
-    sigma = sample_sigma_aniso_zmud(r_nodes, z_nodes, formation, borehole,
-                                    subsample=subsample)
-    A, fid, diag, Tr, Tz = assemble_csr(r_nodes, z_nodes, sigma)
+    nz, nr = len(z_nodes), len(r_nodes)
+    fid = -np.ones((nz, nr), dtype=np.int64)
+    fid[1:-1, :-1] = np.arange((nz - 2) * (nr - 1)).reshape(nz - 2, nr - 1)
 
     tasks = {}
     for t, c in cfgs.items():
@@ -250,15 +245,38 @@ def build_global_problem(tools, depths, formation, borehole, h_min=None,
 
     return {
         "tools": list(tools), "depths": depths,
-        "r_nodes": r_nodes, "z_nodes": z_nodes,
+        "r_nodes": r_nodes, "z_nodes": z_nodes, "fid": fid,
         "h_min": float(h_min), "domain_radius": float(domain_radius),
-        "sigma": sigma, "A": A, "fid": fid,
-        "diag": diag, "Tr": Tr, "Tz": Tz,
-        "bandwidth": len(r_nodes) - 1,
-        "tasks": tasks, "n_free": A.shape[0],
+        "bandwidth": nr - 1,
+        "tasks": tasks, "n_free": int((nz - 2) * (nr - 1)),
         "uniq_src": uniq_src, "n_tasks": int(len(tools) * len(depths)),
         "n_src_recip": int(len(uniq_recip)),
     }
+
+
+def build_global_problem(tools, depths, formation, borehole, h_min=None,
+                         domain_radius=None, growth=1.15, fine_margin=0.5,
+                         subsample=4):
+    """Global grid + explicit operator + per-(tool, depth) task indexing.
+
+    One grid for ALL tools (v2 "variant b"): axial spacing = the finest tool
+    h_min, radius = the largest tool auto-R (v1 conventions: h_min from
+    tool.default_h_min, R = max(10*span, 5)). Pass a single-tool list for the
+    per-tool "variant a".
+
+    Returns a dict with the grid, sigma, A (CSR on free nodes), band metadata,
+    and per-tool task arrays in FREE numbering: src/M/N node ids per depth,
+    plus the deduplicated source-column table (unique src -> column).
+    """
+    p = build_global_tasks(tools, depths, formation, borehole, h_min=h_min,
+                           domain_radius=domain_radius, growth=growth,
+                           fine_margin=fine_margin)
+    sigma = sample_sigma_aniso_zmud(p["r_nodes"], p["z_nodes"], formation,
+                                    borehole, subsample=subsample)
+    A, fid, diag, Tr, Tz = assemble_csr(p["r_nodes"], p["z_nodes"], sigma)
+    assert p["n_free"] == A.shape[0] and (fid == p["fid"]).all()
+    p.update({"sigma": sigma, "A": A, "diag": diag, "Tr": Tr, "Tz": Tz})
+    return p
 
 
 # ---------------------------------------------------------------- solve ----

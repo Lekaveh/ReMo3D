@@ -164,15 +164,25 @@ Ordered by the report's do-not-invert priority: math first, kernels second.
 ## 7. Immediate next actions
 
 Phase 0 items 1–4 are DONE (see status above; scripts exist under
-`scripts/gpu_v2_*.py`). Next, in order:
+`scripts/gpu_v2_*.py`).
 
-1. **G-phase prototype:** JAX `lax.scan` port of the global block-Thomas
-   (reuse `direct.py` machinery): factor once per sample on GPU, solve the
-   531 columns as (111×111)@(111×531) GEMM sweeps, `vmap` over samples.
-   Measure s/sample vs the 7.65 s v1 baseline and the <3.06 s gate.
-2. E2 residual: boundary-saturation study (`domain_radius` sweep of the
+> **G1 DONE (2026-07-17): gate PASSED ×2.2.** `global_gpu.py` — jitted
+> σ→assembly→factor-scan→solve-scans pipeline, vmap over samples; mixed
+> precision (fp64 Schur recursion → fp32 factors/solves; pure fp32 NaNs at
+> row ~2153; Ra error 4e-5). **1.40 s/sample @ B=8** (2.58 @ B=4, 9.87 @
+> B=1) = ×5.5 over v1, ×28.6 over the CPU pipeline. Both scans are
+> latency-bound → B is the lever, bounded by the ~3 GB/sample fp32 forward
+> stack. Bench: `scripts/gpu_v2_global_gpu_bench.py`.
+
+Next, in order:
+
+1. E2 residual: boundary-saturation study (`domain_radius` sweep of the
    global grid vs NGSolve at matched R, const-RM data) + decide the
    production mud convention (v2's z-varying column is the more faithful
    physics and the only one compatible with factorization reuse).
-3. cuDSS remains the fallback/comparison path (nvcc 11.8 compatibility to
-   check) — the block-Thomas scan needs no new toolchain at all.
+2. G2 hardening: full validation ladder (Ex1 + fresh-NGSolve subset),
+   100-sample benchmark with energy/sample, multi-GPU sharding by sample
+   batches, driver API integration.
+3. Optional tuning: larger B via k-chunked forward stack; scan `unroll`;
+   per-tool grids to shrink m. cuDSS stays a comparison path only — the
+   scan port needed no new toolchain.
