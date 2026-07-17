@@ -135,3 +135,11 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   returns the standard logs contract; verified vs bench path (6.7e-5).
 - v2-fp64 regression-baseline recompute (100 optim samples) launched.
 - pages touched: findings/gpu-solver-v2.md (G2 section, verdict).
+
+## [2026-07-17] finding | G2: fp64 regression baseline recomputed
+- benchmark_data/gpu_solver/global_optim_bench_f64.npz: v2-fp64 logs for all
+  100 optim_bench samples (adopted conventions), 3.41 s/sample B=4 (x12 vs CG
+  pipeline even in fp64). Mixed path agrees to worst 1.9e-4 / mean 7.7e-6 over
+  50 samples -> this file replaces the stored pipeline logs as the regression
+  gate (those carry R=90 truncation + batch=5 sharing).
+- pages touched: findings/gpu-solver-v2.md (baseline section, verdict).

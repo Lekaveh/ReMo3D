@@ -198,16 +198,28 @@ verified against the bench path (6.7e-5, fp32 batching noise).
 `dtype/tol/precond/batch_size/backend` are ignored on this path; conventions
 are v2's (z-varying mud, far boundary).
 
+## G2 — regression baseline recomputed
+
+`benchmark_data/gpu_solver/global_optim_bench_f64.npz`: **v2-fp64 logs for
+all 100 optim_bench samples** (adopted conventions: z-varying mud, R=720;
+fp64 is 4.9e-11-exact for this operator). Generated with
+`gpu_v2_optim_bench.py --dtype f64` at 3.41 s/sample (B=4, one A6000 —
+still ×12 vs the CG pipeline). The production mixed-precision path agrees
+with this baseline to **worst 1.9e-4, mean 7.7e-6** over 50 samples — that
+is the regression gate to test against, replacing the stored pipeline logs
+(which carry R=90 truncation + batch=5 mesh sharing).
+
 ## Verdict
 
 **Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS
 amortization ×2.41 on top of factor-once, discretization at parity with v1,
 accuracy differences understood (and favor v2), the GPU implementation beats
 the gate by ×2.2, boundary and mud conventions decided and measured, 2-GPU
-sharding demonstrated, **Ex1 ladder passed (max 1.00 %) and the driver API
-integrated**. Remaining for production: regression-baseline recompute
-(v2-fp64 run in progress), fresh-NGSolve matched-convention subset for the
-record, 3rd-GPU sharding when the card frees up.
+sharding demonstrated, **Ex1 ladder passed (max 1.00 %), driver API
+integrated, and the fp64 regression baseline recomputed**. Remaining:
+fresh-NGSolve matched-convention subset for the record, 3rd-GPU sharding
+when the card frees up, and the strategic G7 follow-on (adjoint solves on
+the same factorization → Fréchet kernels for sensitivity/DOI/inversion).
 
 ## Links
 
