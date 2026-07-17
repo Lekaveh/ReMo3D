@@ -209,6 +209,47 @@ with this baseline to **worst 1.9e-4, mean 7.7e-6** over 50 samples — that
 is the regression gate to test against, replacing the stored pipeline logs
 (which carry R=90 truncation + batch=5 mesh sharing).
 
+## CPU-compat mode (`convention="cpu"`) — matching the pipeline where possible
+
+User requirement: v2 must reproduce the CPU pipeline's numbers; where it
+can't, provide an imitation mode without giving up the speed class.
+
+**Design.** The scalar-mud-per-depth convention makes the operator
+depth-dependent — fatal for factor-once *naively*. But face conductances are
+LINEAR in the mud conductivity ν=1/RM for pure-mud cells, so
+A(ν) ≈ A_ref + Δν·A₁ + Δν²·A₂ (quadratic fit; caliper-crossing cells'
+harmonic mixes captured to O(Δν³)). Each source column's own ν is then
+handled by a 3-term **Neumann series** on the single ν_ref factorization.
+Two numerical traps found and fixed on the way: (1) residual-based fp32
+refinement stalls at ~1e-2 — catastrophic cancellation of b−Ax near the
+singular source (the series form removes b entirely); (2) the ΔA·x stencil
+sum itself cancels (discrete divergence of a near-harmonic field), so the
+ΔA applies run in fp64 while solves stay fp32. Column chunks execute under
+`lax.map` (sequential — a python loop lets XLA schedule chunks concurrently
+and blow the memory peak).
+
+**Exactness vs its own convention:** worst **5.2e-5** against per-column
+scalar-mud factorizations (native precision floor).
+
+**vs stored pipeline logs (100 samples):** means drop to 0.34–1.4 %
+(native: 1.2–1.9 %); residual maxima are the references' own batch_size=5
+and truncation errors.
+
+**vs fresh unbatched NGSolve** (samples 0 & 56, every 4th depth): sample 0
+(normal mud) — short tools ≤1.0 %, A8.0 0.60 %. Sample 56 (RM≈0.15, salt
+mud; 31/100 samples have mean RM<0.5) — short tools disagree by up to 40 %,
+and the R-sweep proves whose error it is: **NGSolve converges to the compat
+value as its window grows** (A0.4 z=24.8: R=5→0.763, R=20→0.469,
+R=80→0.4559 vs compat 0.4566). The pipeline's per-depth ±R z-window is
+untruncatable-imitable in a factor-once architecture *and* carries up to
+~67 % error of its own in the conductive-channel regime — documented as the
+one intentional non-match.
+
+**Cost:** 6.90 s/sample warm (B=4, kc=96) — still faster than every CPU
+config (Vd 11.84 s), ~10× slower than native v2 (0.64 s); the refinement
+temporaries limit B (XLA buffer bloat — optimization TODO). Driver:
+`compute_logs_gpu(..., global_solver=True, convention="cpu")`.
+
 ## Verdict
 
 **Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS

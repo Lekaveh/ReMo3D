@@ -300,7 +300,7 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
                      domain_radius=None, dtype=jnp.float64,
                      tol=1e-8, maxiter=None, batch_size=None,
                      precond="mg", shared_grid=False, global_solver=False,
-                     precision="mixed", verbose=False):
+                     precision="mixed", convention="v2", verbose=False):
     """GPU forward modelling for a list of tools over measurement depths.
 
     Parameters mirror Model.compute_synthetic_logs where they overlap;
@@ -316,11 +316,21 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
     global_solver=True is the v2 path (RECOMMENDED — see
     GPU_SOLVER_V2_PLAN.md / wiki findings/gpu-solver-v2): ONE global grid
     over the whole logged interval, factor once, all (tool, depth) tasks as
-    deduplicated RHS columns. Conventions differ from the per-depth paths:
-    z-varying mud column and a far boundary (domain_radius default
-    max(80*span, 45)). `precision` is "mixed" (fp64 factor recursion, fp32
-    solves; Ra error ~4e-5) or "f64"; `dtype`/`tol`/`precond`/`batch_size`/
-    `backend` are ignored on this path.
+    deduplicated RHS columns. `precision` is "mixed" (fp64 factor recursion,
+    fp32 solves; Ra error ~4e-5) or "f64"; `dtype`/`tol`/`precond`/
+    `batch_size`/`backend` are ignored on this path.
+
+    convention (global path only):
+      "v2" (default) — physical z-varying mud column + far boundary
+        (domain_radius max(80*span, 45));
+      "cpu" — imitate the CPU pipeline where architecturally possible:
+        scalar mud RM(z_sim) per task (mud-split operator + Neumann series
+        on one factorization, exact to ~5e-5) and the v1 boundary radius
+        max(10*span, 5). NOT imitable: the pipeline's per-depth z-window
+        truncation — on conductive-mud models its own error reaches tens of
+        percent (fresh NGSolve converges to the v2 value as its window
+        grows), so residual differences remain exactly where the pipeline
+        itself is unconverged.
 
     Returns
     -------
@@ -336,11 +346,18 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
 
     if global_solver:
         from . import global_op, global_gpu
+        from . import tool as gtool
         t0 = time.perf_counter()
+        if convention == "cpu" and domain_radius is None:
+            domain_radius = max(max(10.0 * gtool.tool_config(t)["span"], 5.0)
+                                for t in tools)
         problem = global_op.build_global_tasks(
             tools, measurement_depths, formation, borehole,
             h_min=h_min, domain_radius=domain_radius, growth=growth)
-        solver = global_gpu.make_solver(problem, precision=precision)
+        solver = global_gpu.make_solver(
+            problem, precision=precision,
+            mud=("cpu" if convention == "cpu" else "log"),
+            chunk_cols=(96 if convention == "cpu" else None))
         X0 = solver(np.asarray(formation, float)[None],
                     np.asarray(borehole, float)[None])
         ra = global_gpu.extract_logs(problem, X0)[0]

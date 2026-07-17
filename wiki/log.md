@@ -143,3 +143,18 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   50 samples -> this file replaces the stored pipeline logs as the regression
   gate (those carry R=90 truncation + batch=5 sharing).
 - pages touched: findings/gpu-solver-v2.md (baseline section, verdict).
+
+## [2026-07-17] finding | CPU-compat mode: scalar mud imitated, z-window can't be
+- convention="cpu": mud-split operator A(nu)=A_ref+dnu*A1+dnu^2*A2 + 3-term
+  Neumann series on ONE factorization; exact to 5.2e-5 vs per-column
+  scalar-mud factorizations. Two fp32 traps fixed: residual cancellation at
+  the source (series form) and stencil-sum cancellation in dA*x (fp64 apply).
+- vs stored refs: means 0.34-1.4% (native 1.2-1.9%). vs fresh unbatched
+  NGSolve: sample 0 <=1.0%; sample 56 (salt mud RM~0.15) short tools up to
+  40% — NGSolve's OWN window truncation: R-sweep converges to the compat
+  value (0.763@R5 -> 0.456@R80 vs 0.457). 31/100 samples are conductive.
+- The per-depth z-window is the one CPU convention factor-once cannot (and
+  should not) imitate. Cost: 6.90 s/sample B=4 (chunked lax.map);
+  native 0.64 s. ngsolve_protocol.npz saved as the clean reference subset.
+- pages touched: findings/gpu-solver-v2.md (compat section); driver
+  convention arg; scripts gpu_v2_ngsolve_protocol/compat_report.

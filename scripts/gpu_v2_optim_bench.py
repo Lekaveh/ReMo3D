@@ -53,6 +53,10 @@ def main(argv=None):
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--batch", type=int, default=10)
     ap.add_argument("--dtype", choices=["mixed", "f64"], default="mixed")
+    ap.add_argument("--convention", choices=["v2", "cpu"], default="v2",
+                    help="cpu = imitate the pipeline (scalar mud per depth "
+                         "via refined mud-split operator + v1 boundary "
+                         "radius max(10*span, 5))")
     args = ap.parse_args(argv)
     precision = args.dtype if args.dtype == "f64" else "mixed"
 
@@ -72,12 +76,22 @@ def main(argv=None):
     fs, bs = np.stack(fs), np.stack(bs)
 
     print(f"device: {jax.devices()[0]}; {n} samples, "
-          f"{len(TOOLS)} tools x {len(depths)} depths", flush=True)
-    p = global_op.build_global_tasks(TOOLS, depths, fs[0], bs[0])
+          f"{len(TOOLS)} tools x {len(depths)} depths "
+          f"[{args.convention} convention]", flush=True)
+    if args.convention == "cpu":
+        from remo3d.gpu_solver import tool as gtool
+        R = max(max(10.0 * gtool.tool_config(t)["span"], 5.0) for t in TOOLS)
+        p = global_op.build_global_tasks(TOOLS, depths, fs[0], bs[0],
+                                         domain_radius=R)
+        solver = global_gpu.make_solver(p, precision=precision, mud="cpu",
+                                        chunk_cols=96)
+    else:
+        p = global_op.build_global_tasks(TOOLS, depths, fs[0], bs[0])
+        solver = global_gpu.make_solver(p, precision=precision)
     print(f"grid {len(p['r_nodes'])}x{len(p['z_nodes'])} "
           f"n_free={p['n_free']:,} k={len(p['uniq_src'])} "
-          f"(dedup x{p['n_tasks'] / len(p['uniq_src']):.2f})", flush=True)
-    solver = global_gpu.make_solver(p, precision=precision)
+          f"(dedup x{p['n_tasks'] / len(p['uniq_src']):.2f}) "
+          f"R={p['domain_radius']:.0f}", flush=True)
 
     B = args.batch
     logs = np.empty((n, len(TOOLS), len(depths)))
@@ -104,7 +118,8 @@ def main(argv=None):
                 logs[si, ti] = sample_logs[t]
 
     suffix = ("" if s0 == 0 else f"_s{s0}") + (
-        "_f64" if precision == "f64" else "")
+        "_f64" if precision == "f64" else "") + (
+        "_cpuconv" if args.convention == "cpu" else "")
     out = (OUT if not suffix else
            OUT.with_name(OUT.stem + suffix + OUT.suffix))
     out.parent.mkdir(parents=True, exist_ok=True)
