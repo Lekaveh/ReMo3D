@@ -130,6 +130,15 @@ reuse + condense + order 3 + domain 40, SEC on, `benchmark_data/optim_bench/summ
   (2-sample smoke, unpinned, indicative only: SEC-off ≈ 2× slower both solvers;
   batch-1 direct 3× slower than batch-5 — 275 tiny factorizations; condense-off
   ≈ +54% on CG but ≈ neutral on direct).
+- **len512 validation** (10 samples, 256 depths, 51 m wells, fresh V1+b5
+  reference at 40 workers = 72.76 s/sample): direct+pin+b5 = 41.46 s at 20
+  workers, 31.38 s at 40 → **2.32× vs V1 at equal (40) workers**, max rel-err
+  **3.2e-7** (even tighter than the short wells' 7.4e-6); w20 and w40 logs are
+  **bit-identical** (pinned solver fully deterministic). Caveat: worker scaling
+  is weak — 20→40 workers bought only 1.32× (parallel efficiency ~66%,
+  ~110 tasks/sample → dispatch waves + master serialization), so the direct
+  solver's edge narrows at high worker counts where V1's long CG tasks
+  parallelize more evenly.
 
 ## Recommendations (updated 2026-07-17)
 
