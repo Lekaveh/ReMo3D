@@ -1,12 +1,42 @@
 # -*- coding: utf-8 -*-
 
+# --- Thread pinning (part 1/2): env caps, MUST run before numpy import -------
+# Each equation solve runs in its own MPI worker process, so parallelism already
+# lives at the process level. `import numpy` alone instantiates a node-sized
+# MKL/libiomp5 pool (64 threads on a 64-core node) in EVERY worker. Those
+# threads sleep through the solves, but 100 workers x 64 = 6400 clones is the
+# ">1000 workers" count seen in ps/htop on HPC. Cap them to
+# REMO3D_WORKER_THREADS (default 1); MPI already supplies the parallelism.
+#
+# NOTE: these env vars do NOT fix the direct-solver blow-up by themselves —
+# see part 2 below. Verified 2026-07-17 (WORK_SUMMARY.md B.3).
+import os
+_worker_threads = os.environ.get("REMO3D_WORKER_THREADS", "1")
+for _tvar in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+              "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_tvar, _worker_threads)
+
 from mpi4py import MPI
 
 import numpy as np
 import ngsolve as ngs
 
+# --- Thread pinning (part 2/2): NGSolve TaskManager — the essential cap ------
+# `Inverse(inverse="sparsecholesky")` (the direct solver) spins up NGSolve's own
+# TaskManager: one std::thread per core, and it IGNORES OMP_/MKL_NUM_THREADS
+# (measured: with both=1 the factorization still ran 64 threads). This is the
+# layer that saturated HPC nodes with direct_solver on — cpu_workers x cores
+# RUNNING threads — while the CG/multigrid path (which never enters TaskManager)
+# looked fine. SetNumThreads is therefore the essential part of the fix, not a
+# belt-and-suspenders extra. Bonus: on these small 2D systems the 1-thread
+# factorization is ~2.8x faster than the node-wide one (TaskManager sync
+# overhead exceeds the work).
+try:
+    ngs.SetNumThreads(int(_worker_threads))
+except Exception:
+    pass
+
 import sys
-import os
 import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
