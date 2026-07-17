@@ -48,3 +48,14 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - Headline: forcing the direct solver (direct_solver=True) = 3.48x AND exact; the ndof<10000 auto-threshold is far too conservative for 2D (~40k DOF). Marked as the best solver + how to invoke.
 - Also benchmarked: #2 p-adaptivity 3.65x (needs direct solver), #3 coarse-far mesh 2.28x, #4 per-tool domain net loss.
 - Updated: findings/optimization-changes.md (Tasks 6/7/9 now done; benchmark-gap closed), concepts/fem-solver.md (direct-vs-CG finding + how to force), overview.md (open thread resolved), index.md.
+
+## [2026-07-17] query | Axis study (SEC/batch/condense × solver) + thread-pinning root cause
+- Ran the axis benchmark (100 samples): CG base 20.72s; pinned direct b5 9.60s
+  (4.30×, exact), b10 8.45s (4.88×, 10% tail), b15 5.85s (7.05×, 11% tail —
+  error saturates past b10, b15 dominates b10).
+- Root-caused the HPC ">1k workers" blow-up: NGSolve TaskManager per-core
+  threads in every worker under `sparsecholesky` (ignores OMP/MKL env);
+  verified in vivo (571 running / 4407 total → 24 / 72 after pin) and fixed in
+  `workers/worker.py` (env caps + `ngs.SetNumThreads(1)`); pinning itself is
+  ~25% faster end-to-end.
+- pages touched: findings/optimization-benchmark.md

@@ -1,9 +1,9 @@
 ---
 title: Optimization Benchmark — realized speedups
 type: finding
-tags: [optimization, performance, solver, benchmark, direct-solver, optim-branch]
+tags: [optimization, performance, solver, benchmark, direct-solver, optim-branch, thread-pinning, batching]
 sources: [repo-docs]
-updated: 2026-07-16
+updated: 2026-07-17
 ---
 
 # Optimization Benchmark — realized speedups & accuracy
@@ -96,14 +96,53 @@ domain). **Code:** `workers/worker.py`, env `REMO3D_PER_TOOL_DOMAIN` — per-tas
 A8.0M1.0N tool forces an ~80 m domain (bigger than the fixed 40 m), inflating
 total DOF (median 76k). Same failure mode as `domain_radius="auto"`.
 
-## Recommendations
+## 2026-07-17 addendum — thread pinning + batch axis (pinned direct)
 
-1. **Make the direct solver the default for 2D** — raise/remove the 10k threshold,
-   or call with `direct_solver=True`. Free 1.7× over the current all-on config,
-   with *better* accuracy. This is the single highest-value change.
-2. p-adaptivity (#2) is worth pursuing if the worst-case tail is tightened.
-3. Order-2 (V6) only if 40% boundary error is acceptable — #1 dominates it.
-4. Drop per-tool / auto domain for suites containing a long tool.
+**Worker thread pinning (the HPC ">1k workers" fix).** Root-cause verified:
+`Inverse(inverse="sparsecholesky")` wakes **NGSolve's own TaskManager** (one
+std::thread per core, per worker) which **ignores `OMP_/MKL_NUM_THREADS`**;
+`import numpy` separately parks a node-sized dormant MKL pool in every worker.
+In vivo (24 workers, 64 cores): unpinned direct phase peaked at **571 running /
+4407 total threads**; pinned = **24 running / 72 total**. Fix in
+`workers/worker.py`: env caps before numpy import **plus `ngs.SetNumThreads(1)`
+(the essential part)**. Pinning is also *faster*: factorization ~2.8× (368→134
+ms standalone), full pipeline **11.84 → 9.60 s/sample**. CG never enters
+TaskManager (pinning-neutral). Details: `WORK_SUMMARY.md` B.3.
+
+**Axis study** (100 samples, pinned direct workers, vs V1; base = symmetric +
+reuse + condense + order 3 + domain 40, SEC on, `benchmark_data/optim_bench/summary_axes.md`):
+
+| Config | s/sample | speedup | max rel-err | mean rel-err |
+|---|--:|--:|--:|--:|
+| CG, batch 5 (== V4) | 20.72 | 1.99× | 1.1e-5 | 6.5e-8 |
+| **direct pinned, batch 5** | **9.60** | **4.30×** | **7.4e-6** | 1.6e-8 |
+| direct pinned, batch 10 | 8.45 | 4.88× | 10% | 0.51% |
+| direct pinned, batch 15 | 5.85 | 7.05× | 11% | 0.47% |
+
+- **Batching is the approximation axis**: batch 5 is solver-exact; batch 10
+  jumps to a 10% worst-case tail (sawtooth error over the whole well, worst on
+  the short A0.4M0.1N tool — geometric shift from the batch-mean depth; figures:
+  `figures/sample_{86,39,98}_baseline_vs_b10.png`). Interesting: batch 10 → 15
+  barely worsens the tail (10→11%, mean saturates ~0.5%) while speed jumps
+  8.45 → 5.85 s — the error saturates past the initial cliff, so **if ~10% tail
+  is acceptable at all, batch 15 dominates batch 10**.
+- SEC-off / batch-1 / condense-off cells were dropped from the 100-sample run
+  (2-sample smoke, unpinned, indicative only: SEC-off ≈ 2× slower both solvers;
+  batch-1 direct 3× slower than batch-5 — 275 tiny factorizations; condense-off
+  ≈ +54% on CG but ≈ neutral on direct).
+
+## Recommendations (updated 2026-07-17)
+
+1. **Production config: direct solver + pinned workers + batch 5** — 4.30×,
+   solver-exact (7e-6), and safe on HPC (`cpu_workers ≈ cores`, 1 thread each,
+   `REMO3D_WORKER_THREADS=1` default). The old ">1k workers" HPC failure is the
+   TaskManager oversubscription, fixed by the pin; re-enable `direct_solver`.
+2. If a ~10% worst-case tail is tolerable, **batch 15 gives 7.05×** — and
+   dominates batch 10 (same tail, much faster). Map batch ∈ (5, 10) if a
+   tighter tail at ~5-6× is wanted.
+3. p-adaptivity (#2) is worth pursuing if the worst-case tail is tightened.
+4. Order-2 (V6) only if 40% boundary error is acceptable — #1 dominates it.
+5. Drop per-tool / auto domain for suites containing a long tool.
 
 ## Gotchas (for reproducing)
 

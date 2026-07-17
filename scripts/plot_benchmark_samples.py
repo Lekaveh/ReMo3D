@@ -145,8 +145,7 @@ def plot_sample(sid, v1, v5, out_path, cand_label="V5", threshold=0.01):
     ax[3].set_title(f"Absolute error — max {max_abs:.1f} ohm·m")
 
     ax[0].set_ylabel("depth [m]")
-    fig.suptitle(f"Sample {sid}: baseline V1 vs {cand_label}  "
-                 f"(errors concentrate on sharp high-resistivity boundaries)", fontsize=12)
+    fig.suptitle(f"Sample {sid}: baseline V1 vs {cand_label}", fontsize=12)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -160,6 +159,8 @@ def main(argv=None):
     p.add_argument("--candidate", default="V5_all_on")
     p.add_argument("--threshold", type=float, default=0.01,
                    help="Rel-err above which a depth is highlighted as 'large error'. Default: 0.01 (1%).")
+    p.add_argument("--label", default=None,
+                   help="Display label / filename tag for the candidate (default: first token of its name).")
     args = p.parse_args(argv)
 
     v1 = load_variant(args.baseline)
@@ -169,9 +170,9 @@ def main(argv=None):
         if sid not in v1["id_to_row"] or sid not in v5["id_to_row"]:
             print(f"[skip] sample {sid} not in both variants")
             continue
-        tag = args.candidate.split("_")[0].lower()  # e.g. V6_order2 -> "v6"
-        out = FIG_DIR / f"sample_{sid}_baseline_vs_{tag}.png"
-        mr = plot_sample(sid, v1, v5, out, cand_label=args.candidate.split("_")[0], threshold=args.threshold)
+        label = args.label or args.candidate.split("_")[0]  # e.g. V6_order2 -> "V6"
+        out = FIG_DIR / f"sample_{sid}_baseline_vs_{label.lower()}.png"
+        mr = plot_sample(sid, v1, v5, out, cand_label=label, threshold=args.threshold)
         print(f"[plot] sample {sid}: max rel-err {args.candidate} vs V1 = {mr:.2e} -> {out}")
     return 0
 

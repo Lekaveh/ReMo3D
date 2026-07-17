@@ -30,7 +30,15 @@ import numpy as np
 # Canonical order + baseline (kept in sync with benchmark_optimizations.py).
 VARIANT_ORDER = ["V1_baseline", "V2_symmetric", "V3_reuse", "V4_condense",
                  "V5_all_on", "V6_order2", "V7_domain_auto", "V8_all_changes", "Vb_order2_only",
-                 "Vd_direct_forced", "Vp_padaptive", "Vm_coarse_far", "Vt_per_tool_domain"]
+                 "Vd_direct_forced", "Vp_padaptive", "Vm_coarse_far", "Vt_per_tool_domain",
+                 # Axis study: SEC / batch / condense × {CG, direct} (see benchmark_optimizations.py).
+                 "Ax_sec1_b5_cndT_cg", "Ax_sec1_b5_cndT_dir",
+                 "Ax_sec0_b5_cndT_cg", "Ax_sec0_b5_cndT_dir",
+                 "Ax_sec1_b1_cndT_cg", "Ax_sec1_b1_cndT_dir",
+                 "Ax_sec1_b10_cndT_cg", "Ax_sec1_b10_cndT_dir", "Ax_sec1_b15_cndT_dir",
+                 "Ax_sec1_b5_cndF_cg", "Ax_sec1_b5_cndF_dir",
+                 # Thread-pinned worker cells (run after the worker.py pinning fix).
+                 "Ax_pin_cg", "Ax_pin_dir"]
 BASELINE = "V1_baseline"
 
 

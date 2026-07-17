@@ -266,21 +266,43 @@ manager row *5k*), which then **crashes gmsh meshing → NaN logs**.
 float64 (`np.ascontiguousarray(..., dtype=np.float64)`) so the datatype always
 matches regardless of the upstream array dtype. This is a **correctness** fix.
 
-### B.3 Worker thread-pinning — direct-solver oversubscription (uncommitted WIP)
+### B.3 Worker thread-pinning — direct-solver oversubscription (root cause verified 2026-07-17)
 
 **Problem:** each equation solve runs in its own MPI worker process, so
-parallelism already lives at the process level. Left unpinned, the direct
-(sparse-Cholesky) solver's dense-block LAPACK calls (MKL/OpenBLAS) spin up a
-thread pool sized to the **whole node's core count in every worker** —
-`cpu_workers × cores` threads (e.g. 100 × 64 ≈ 6400). That is the observed
-“>1000 workers” blow-up on HPC; it only surfaced with `direct_solver` on because
-the iterative CG/multigrid path never hits dense BLAS.
+parallelism already lives at the process level. Left unpinned, every worker
+carries a node-sized thread army — `cpu_workers × cores` threads (e.g.
+100 × 64 ≈ 6400). That is the observed “>1000 workers” blow-up on HPC.
 
-**Fix (in `remo3d/workers/worker.py`, before numpy/ngsolve import):** pin the
-thread-pool env vars (`OMP_NUM_THREADS`, `MKL_NUM_THREADS`,
-`OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`) to one
-thread per worker (override via `REMO3D_WORKER_THREADS`), plus a
-belt-and-suspenders `ngs.SetNumThreads(...)`. MPI supplies the parallelism.
+**Verified root cause (two distinct layers, traced per-step on the 64-core box
+with `/proc/self/task` sampling):**
+
+1. **Dormant layer — numpy/MKL pool.** `import numpy` alone creates a 64-thread
+   MKL/libiomp5 pool in every worker (nlwp 1 → 64 at import, before any solve).
+   These threads *sleep* through the whole CG path (peak 1 running thread per
+   worker measured in vivo: 24 workers = 3840 threads, exactly 24 running).
+   They inflate thread counts but not load.
+2. **Active layer — NGSolve's own TaskManager, NOT MKL/BLAS.**
+   `a.mat.Inverse(..., inverse="sparsecholesky")` internally spins up NGSolve's
+   TaskManager with **std::thread per core**, and it **ignores
+   `OMP_NUM_THREADS`/`MKL_NUM_THREADS`** — with both set to 1 the factorization
+   still ran 65 threads (verified). This is what saturates the node when
+   `direct_solver` is on: every worker's factorization wakes a full-node pool
+   (24 workers × 64 = ~1536 *running* threads locally; ~6400 on HPC). The
+   CG/multigrid path never enters TaskManager, hence “CG is fine”.
+
+**Fix (verified):** `ngs.SetNumThreads(1)` **is the essential part** — with it,
+sparsecholesky runs 1 thread (peak_running=2) regardless of env vars. The env
+pins (`OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1`, …) are still wanted to remove
+the dormant numpy/MKL pool (memory + clone noise), but **env vars alone do NOT
+fix the blow-up**. Both belong at the top of `remo3d/workers/worker.py` before
+numpy/ngsolve imports (env) and right after `import ngsolve` (SetNumThreads).
+
+**Bonus finding:** on these small 2D systems the 1-thread factorization is
+~2.8× *faster* than the 64-thread one (134 ms vs 368 ms per factorization,
+26k-DOF test) — TaskManager sync overhead exceeds the work. So pinning doesn't
+trade speed for tidiness; it *gains* speed. All local direct-solver benchmarks
+so far (Vd 3.48×, the axis study) ran unpinned and thus *understate* the direct
+solver's true advantage.
 
 ---
 

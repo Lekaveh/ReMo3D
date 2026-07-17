@@ -92,10 +92,83 @@ VARIANTS = [
     {"name": "Vt_per_tool_domain", "desc": "#4 per-tool domain (env REMO3D_PER_TOOL_DOMAIN); solver = V5",
      "symmetric": True, "reuse_assembly": True, "direct_solver": "auto", "condense": True, "fe_order": 3, "domain_radius": 40.0},
 ]
+
+# --------------------------------------------------------------------------
+# Axis-study variants: three ablation axes crossed with the solver {CG, direct}.
+# Two knobs never varied in the V1-V8 ladder become first-class here:
+#   * sec        — single-electrode-computation mode (reuse one FE solve across
+#                  all tools sharing a current-electrode depth). Held ON for
+#                  V1-V8; toggled here via ``model.sec`` (master-side task prep,
+#                  no worker re-spawn). Documented exact (reciprocity).
+#   * batch_size — depths merged per mesh/assembly. batch>1 is an *approximate*
+#                  geometric shift from the batch-mean depth (batch=1 is exact).
+# The base cell (sec on, batch 5, condense True) is shared by all three axes,
+# so 3 axes give 14 table cells but only 10 distinct runs. Base = V4/Vd config
+# (symmetric+reuse, order 3, domain 40) — the two base rows reproduce V4/Vd.
+_AX_BASE = {"symmetric": True, "reuse_assembly": True, "fe_order": 3, "domain_radius": 40.0}
+AXIS_VARIANTS = [
+    # --- shared base cell (sec on, batch 5, condense True): CG + direct -------
+    {"name": "Ax_sec1_b5_cndT_cg",  "desc": "axis base: SEC on, batch 5, condense, CG (== V4_condense)",
+     "sec": True,  "batch_size": 5,  "condense": True,  "direct_solver": False, **_AX_BASE},
+    {"name": "Ax_sec1_b5_cndT_dir", "desc": "axis base: SEC on, batch 5, condense, direct (== Vd_direct_forced)",
+     "sec": True,  "batch_size": 5,  "condense": True,  "direct_solver": True,  **_AX_BASE},
+    # --- SEC axis: sec OFF ----------------------------------------------------
+    {"name": "Ax_sec0_b5_cndT_cg",  "desc": "SEC axis: SEC off, batch 5, condense, CG (one FE solve per tool)",
+     "sec": False, "batch_size": 5,  "condense": True,  "direct_solver": False, **_AX_BASE},
+    {"name": "Ax_sec0_b5_cndT_dir", "desc": "SEC axis: SEC off, batch 5, condense, direct",
+     "sec": False, "batch_size": 5,  "condense": True,  "direct_solver": True,  **_AX_BASE},
+    # --- batch axis: batch 1 (exact, no geometric-shift) and batch 10 ---------
+    {"name": "Ax_sec1_b1_cndT_cg",  "desc": "batch axis: batch 1 (exact), SEC on, condense, CG",
+     "sec": True,  "batch_size": 1,  "condense": True,  "direct_solver": False, **_AX_BASE},
+    {"name": "Ax_sec1_b1_cndT_dir", "desc": "batch axis: batch 1 (exact), SEC on, condense, direct",
+     "sec": True,  "batch_size": 1,  "condense": True,  "direct_solver": True,  **_AX_BASE},
+    {"name": "Ax_sec1_b10_cndT_cg", "desc": "batch axis: batch 10, SEC on, condense, CG",
+     "sec": True,  "batch_size": 10, "condense": True,  "direct_solver": False, **_AX_BASE},
+    {"name": "Ax_sec1_b10_cndT_dir","desc": "batch axis: batch 10, SEC on, condense, direct",
+     "sec": True,  "batch_size": 10, "condense": True,  "direct_solver": True,  **_AX_BASE},
+    {"name": "Ax_sec1_b15_cndT_dir","desc": "batch axis: batch 15, SEC on, condense, direct (NB: ~19 tasks < 24 workers -> pool underfill)",
+     "sec": True,  "batch_size": 15, "condense": True,  "direct_solver": True,  **_AX_BASE},
+    # --- condense axis: condense OFF ------------------------------------------
+    {"name": "Ax_sec1_b5_cndF_cg",  "desc": "condense axis: condense off, SEC on, batch 5, CG",
+     "sec": True,  "batch_size": 5,  "condense": False, "direct_solver": False, **_AX_BASE},
+    {"name": "Ax_sec1_b5_cndF_dir", "desc": "condense axis: condense off, SEC on, batch 5, direct",
+     "sec": True,  "batch_size": 5,  "condense": False, "direct_solver": True,  **_AX_BASE},
+]
+VARIANTS += AXIS_VARIANTS
+AXIS_NAMES = [v["name"] for v in AXIS_VARIANTS]
+
+# --------------------------------------------------------------------------
+# Pinned-worker variants: same configs as the axis base cells, but meant to be
+# run AFTER the worker thread-pinning fix is applied to workers/worker.py
+# (REMO3D_WORKER_THREADS=1: env caps + ngs.SetNumThreads). Verified 2026-07-17
+# (WORK_SUMMARY.md B.3): unpinned, every direct-solver factorization wakes
+# NGSolve's TaskManager with one thread per core in EVERY worker, so all
+# unpinned direct numbers understate the direct solver. The CG cell is the
+# control (CG never enters TaskManager, so pinning should not move it).
+PINNED_VARIANTS = [
+    {"name": "Ax_pin_cg",  "desc": "pinned workers control: SEC on, batch 5, condense, CG (expect == Ax_sec1_b5_cndT_cg)",
+     "sec": True, "batch_size": 5, "condense": True, "direct_solver": False, **_AX_BASE},
+    {"name": "Ax_pin_dir", "desc": "pinned workers: SEC on, batch 5, condense, direct — honest direct-solver number (no TaskManager oversubscription)",
+     "sec": True, "batch_size": 5, "condense": True, "direct_solver": True,  **_AX_BASE},
+]
+VARIANTS += PINNED_VARIANTS
+PINNED_NAMES = [v["name"] for v in PINNED_VARIANTS]
+
 VARIANTS_BY_NAME = {v["name"]: v for v in VARIANTS}
 BASELINE_NAME = "V1_baseline"
 HEADLINE = ["V1_baseline", "V5_all_on"]
 FLAG_KEYS = ["symmetric", "reuse_assembly", "direct_solver", "condense", "fe_order", "domain_radius"]
+
+
+def variant_sec(variant):
+    """SEC (single-electrode-computation) mode for a variant; default on (V1-V8)."""
+    return bool(variant.get("sec", True))
+
+
+def variant_batch(variant, cli_default):
+    """Per-variant batch_size override, falling back to the CLI --batch-size."""
+    b = variant.get("batch_size")
+    return int(b) if b else int(cli_default)
 
 
 def _ensure_mpi_launcher():
@@ -166,6 +239,13 @@ def run_variant(model, variant, samples, tools, n_depths, mesh_generator, batch_
     metrics_rows = []
 
     kwargs = {k: variant[k] for k in ("symmetric", "reuse_assembly", "direct_solver", "condense", "fe_order")}
+    # SEC and batch_size are per-variant here (the V1-V8 ladder held both fixed).
+    # model.sec is a master-side task-prep switch, so toggling it needs no worker
+    # re-spawn; for these A-M-N tools the constructor flag can't turn it off, so
+    # we set the attribute directly.
+    sec = variant_sec(variant)
+    eff_batch = variant_batch(variant, batch_size)
+    model.sec = sec
     variant_started = time.perf_counter()
 
     for si, s in enumerate(samples):
@@ -173,10 +253,11 @@ def run_variant(model, variant, samples, tools, n_depths, mesh_generator, batch_
             s["formation"].copy(), s["borehole"].copy(),
             borehole_geometry_type="radius", dip=0,
         )
+        model.sec = sec  # re-assert per sample (defensive: never inherit a prior variant's value)
         model.simulate_logs(
             s["depths"].copy(),
             domain_radius=variant["domain_radius"],
-            batch_size=batch_size,
+            batch_size=eff_batch,
             mesh_generator=mesh_generator,
             collect_metrics=collect_metrics,
             **kwargs,
@@ -209,7 +290,8 @@ def save_variant_npz(out_dir, variant, samples, tools, depths, logs_arr, wall, n
         out_dir / f"{variant['name']}.npz",
         variant=variant["name"],
         desc=variant["desc"],
-        flags=json.dumps({k: variant[k] for k in FLAG_KEYS}),
+        flags=json.dumps({**{k: variant[k] for k in FLAG_KEYS},
+                          "sec": variant_sec(variant), "batch_size": int(batch_size)}),
         sample_ids=np.array([s["id"] for s in samples], dtype=int),
         tools=np.array(tools),
         depths=np.asarray(depths, dtype=float),
@@ -236,13 +318,15 @@ def write_walltime_csv(path, results, samples, tools, mesh_generator, batch_size
         w = csv.writer(fh)
         w.writerow(["variant", "sample", "wall_time_s", "n_depths", "n_tools",
                     "mesh_generator", "domain_radius", "fe_order",
-                    "symmetric", "reuse_assembly", "direct_solver", "condense", "nan_count"])
+                    "symmetric", "reuse_assembly", "direct_solver", "condense",
+                    "sec", "batch_size", "nan_count"])
         for name, res in results.items():
             v = VARIANTS_BY_NAME[name]
             for si, s in enumerate(samples):
                 w.writerow([name, s["id"], f"{res['wall'][si]:.6f}", res["logs"].shape[2], len(tools),
                             mesh_generator, v["domain_radius"], v["fe_order"],
                             v["symmetric"], v["reuse_assembly"], v["direct_solver"], v["condense"],
+                            variant_sec(v), variant_batch(v, batch_size),
                             int(res["nan_count"][si])])
 
 
@@ -294,7 +378,9 @@ def parse_args(argv=None):
     p.add_argument("--samples-dir", type=Path, default=DEFAULT_SAMPLES_DIR,
                    help=f"Directory of sample_<n>.npz. Default: {DEFAULT_SAMPLES_DIR}.")
     p.add_argument("--variants", default="all",
-                   help="'all', 'headline' (baseline+all_on), or a comma list of variant names. Default: all.")
+                   help="'all', 'headline' (baseline+all_on), 'axes' (the 10 SEC/batch/condense × solver "
+                        "study variants), 'pinned' (thread-pinned worker cells; apply the worker.py "
+                        "pinning fix first), or a comma list of variant names. Default: all.")
     p.add_argument("--tools", default=",".join(DEFAULT_TOOLS), help="Comma-separated tool names.")
     p.add_argument("--cpu-workers", type=int, default=24, help="MPI CPU workers. Default: 24.")
     p.add_argument("--mesh-generator", default="gmsh", choices=["gmsh", "netgen"],
@@ -313,6 +399,10 @@ def select_variants(spec):
         return list(VARIANTS)
     if spec == "headline":
         return [VARIANTS_BY_NAME[n] for n in HEADLINE]
+    if spec == "axes":
+        return [VARIANTS_BY_NAME[n] for n in AXIS_NAMES]
+    if spec == "pinned":
+        return [VARIANTS_BY_NAME[n] for n in PINNED_NAMES]
     chosen = []
     for name in [s.strip() for s in spec.split(",") if s.strip()]:
         if name not in VARIANTS_BY_NAME:
@@ -384,7 +474,7 @@ def main(argv=None):
             all_metrics.extend(metrics_rows)
             # Checkpoint this variant immediately (survives a later crash/timeout).
             save_variant_npz(out_dir, variant, samples, tools, depths, logs_arr, wall, nan_counts,
-                             args.mesh_generator, args.batch_size)
+                             args.mesh_generator, variant_batch(variant, args.batch_size))
             write_walltime_csv(out_dir / "walltime.csv", results, samples, tools,
                                args.mesh_generator, args.batch_size)
             if args.collect_metrics:
