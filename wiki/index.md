@@ -26,3 +26,4 @@ first for the synthesis, then drill into pages below. Updated on every ingest.
 
 ## Sources
 - [repo-docs.md](sources/repo-docs.md) — `[[repo-docs]]` the 16-page `docs/` code documentation set (ingested 2026-07-15).
+- [deep-research-gpu-solver.md](sources/deep-research-gpu-solver.md) — `[[deep-research-gpu-solver]]` ChatGPT deep-research report on breaking the GPU solver's ×5.2 ceiling; bet #1 = global factorization + many RHS; citations restored from the PDF (ingested 2026-07-17).

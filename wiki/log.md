@@ -59,3 +59,16 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   `workers/worker.py` (env caps + `ngs.SetNumThreads(1)`); pinning itself is
   ~25% faster end-to-end.
 - pages touched: findings/optimization-benchmark.md
+
+## [2026-07-17] ingest | Deep research: GPU-first axisymmetric solver (ChatGPT)
+- User-commissioned LLM deep-research report on breaking the GPU solver's ×5.2
+  ceiling. Raw md export had corrupted citations (`citeturn…`); the reference
+  list (24 footnotes) was restored from the user's PDF export into the source page.
+- Raw renamed: `raw/deep-research-report.md` →
+  `raw/2026-07-17-deep-research-gpu-first-axisymmetric-solver.md`.
+- Key take: the ×5.2 wall is architectural, not hardware — bet #1 is a global
+  operator + factor-once/solve-many (cuDSS, reciprocity RHS cut); local
+  persistent-kernel path is the fallback. Decision matrix of 3 experiments.
+- pages touched: sources/deep-research-gpu-solver.md (new),
+  concepts/fem-solver.md, concepts/parallel-execution.md, overview.md, index.md.
+- follow-up artifact: `../GPU_SOLVER_V2_PLAN.md` (expanded work plan, repo root).

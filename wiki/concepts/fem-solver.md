@@ -2,8 +2,8 @@
 title: FEM Solver
 type: concept
 tags: [fem, ngsolve, cg, preconditioner, static-condensation, gpu, method]
-sources: [repo-docs]
-updated: 2026-07-16
+sources: [repo-docs, deep-research-gpu-solver]
+updated: 2026-07-17
 ---
 
 # FEM Solver
@@ -74,6 +74,17 @@ preconditioner (`CreateDeviceMatrix`) and RHS (`CreateDeviceVector`) to device
 and runs CG there. Reuses the CPU factorization when a direct inverse exists. GPU
 helps only when the local solve is large enough to amortize transfer/setup — see
 [performance & accuracy](performance-and-accuracy.md).
+
+> **GPU solver v1** (branches `gpu-solver*`): a standalone structured-grid
+> full-GPU pipeline (graded `(r,z)` grid, matrix-free FV/Q1 operators, batched
+> block-Thomas direct solver in JAX) reached **×5.2** over the forced-direct
+> 32-worker CPU pipeline at sub-percent accuracy; four kernel-level attempts to
+> go further were ruled out — see [`../../WORK_SUMMARY.md`](../../WORK_SUMMARY.md).
+> **Proposed v2** ([[deep-research-gpu-solver]]): replace per-depth local
+> factorizations with a **global operator + factor-once/solve-many** (σ is fixed
+> per pseudowell; the ~1280 solves per sample differ only by source position) —
+> the assemble-once/solve-per-RHS split above taken to its architectural limit.
+> Plan: [`../../GPU_SOLVER_V2_PLAN.md`](../../GPU_SOLVER_V2_PLAN.md).
 
 ## Output
 

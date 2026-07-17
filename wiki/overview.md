@@ -2,8 +2,8 @@
 title: Overview & Synthesis
 type: overview
 tags: [synthesis, thesis]
-sources: [repo-docs]
-updated: 2026-07-16
+sources: [repo-docs, deep-research-gpu-solver]
+updated: 2026-07-17
 ---
 
 # ReMo3D Research Wiki — Overview
@@ -38,7 +38,9 @@ distilled here via [[repo-docs]]):
   correctness is checked in [validation](concepts/validation.md).
 - **Findings** — our own work: [optimization changes](findings/optimization-changes.md)
   made on the `optim` branch, plus sensitivity / benchmark results as they land.
-- **Literature** — summaries of external papers/reports in `sources/` (none yet).
+- **Literature** — summaries of external papers/reports in `sources/`
+  (first external source: [[deep-research-gpu-solver]], an LLM deep-research
+  report — peer-reviewed literature still wanted).
 
 ## Key facts worth surfacing
 
@@ -62,8 +64,16 @@ distilled here via [[repo-docs]]):
 - Sensitivity analysis is active on the `optim` branch
   (`remo3d/sensitivity.py`, `Sensitivity.ipynb`) — no [findings/](findings/) page
   captures it yet.
-- No **external** literature ingested — physics/method pages cite only
-  [[repo-docs]] and want peer-reviewed references.
+- **GPU forward solver v2 is the active program.** v1 (structured-grid JAX
+  block-Thomas) reached **×5.2** and hit a small-block factorization wall
+  ([`../WORK_SUMMARY.md`](../WORK_SUMMARY.md)). The ingested
+  [[deep-research-gpu-solver]] report argues the wall is architectural, not
+  hardware, and recommends a **global operator + factor-once/solve-many**;
+  decision experiments are scheduled in
+  [`../GPU_SOLVER_V2_PLAN.md`](../GPU_SOLVER_V2_PLAN.md).
+- Only one **external** source ingested so far ([[deep-research-gpu-solver]],
+  LLM-generated) — physics/method pages still cite mostly [[repo-docs]] and want
+  peer-reviewed references.
 
 ## Current thesis
 

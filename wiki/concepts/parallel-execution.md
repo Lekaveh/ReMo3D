@@ -2,8 +2,8 @@
 title: Parallel Execution (Master/Worker)
 type: concept
 tags: [mpi, parallel, sec, batching, load-balancing, method]
-sources: [repo-docs]
-updated: 2026-07-15
+sources: [repo-docs, deep-research-gpu-solver]
+updated: 2026-07-17
 ---
 
 # Parallel Execution
@@ -46,6 +46,11 @@ highest-impact optimization. `force_single_electrode_configuration=True`
 `ABMN → MNAB`. This rewrite is **exact** — it rests on electrode reciprocity and
 a recomputed [geometric factor](resistivity-logging.md#geometric-factors), not
 numerical fitting. Enabled only when every tool has one active current electrode.
+
+> The same reciprocity principle underpins the **RHS-reduction** step of the
+> proposed GPU-v2 *global factor-once/solve-many* architecture
+> ([[deep-research-gpu-solver]]): on one global operator, a single solve per
+> *unique electrode node* can serve every (tool, depth) measurement touching it.
 
 ### Batching
 Adjacent simulation depths are grouped into one task so a single mesh is reused;
