@@ -67,9 +67,11 @@ distilled here via [[repo-docs]]):
 - **GPU forward solver v2 is the active program.** v1 (structured-grid JAX
   block-Thomas) reached **×5.2** and hit a small-block factorization wall
   ([`../WORK_SUMMARY.md`](../WORK_SUMMARY.md)). The ingested
-  [[deep-research-gpu-solver]] report argues the wall is architectural, not
-  hardware, and recommends a **global operator + factor-once/solve-many**;
-  decision experiments are scheduled in
+  [[deep-research-gpu-solver]] report argued the wall is architectural, not
+  hardware — and the Phase 0 experiments **confirmed the global
+  factor-once/solve-many path: GO**
+  ([findings/gpu-solver-v2.md](findings/gpu-solver-v2.md)). Next: the JAX
+  scan port + boundary study per
   [`../GPU_SOLVER_V2_PLAN.md`](../GPU_SOLVER_V2_PLAN.md).
 - Only one **external** source ingested so far ([[deep-research-gpu-solver]],
   LLM-generated) — physics/method pages still cite mostly [[repo-docs]] and want

@@ -23,6 +23,7 @@ first for the synthesis, then drill into pages below. Updated on every ingest.
 - [optimization-changes.md](findings/optimization-changes.md) — what changed on the `optim` branch to speed up the 2D solve path, and why (Tasks 0–9; all landed as of 2026-07-16).
 - [optimization-benchmark.md](findings/optimization-benchmark.md) — **realized** speedups (100 samples, original vs each optimization); forcing the direct solver = 3.48× and exact; four explored ideas + how to invoke the direct solver.
 - [doi-table.md](findings/doi-table.md) — per-tool radial & vertical depth-of-investigation at 90/95/99% (12 tools; homogeneous background).
+- [gpu-solver-v2.md](findings/gpu-solver-v2.md) — **Phase 0 of the global factor-once/solve-many path: GO.** Sizing trivial (1.37M DOF, 1.2 GB factor), ×2.41 RHS dedup, CPU control 75 s/sample, discretization parity with v1 (0.03–0.09%); the 3–5% "errors" were the mud-column + boundary-truncation conventions.
 
 ## Sources
 - [repo-docs.md](sources/repo-docs.md) — `[[repo-docs]]` the 16-page `docs/` code documentation set (ingested 2026-07-15).

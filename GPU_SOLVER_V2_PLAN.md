@@ -32,6 +32,17 @@ fork, then investment in exactly one branch.
 
 ## 1. Phase 0 — decisive experiments (E0–E3)
 
+> **STATUS (2026-07-17): Phase 0 run — global path GO.** Results in
+> [`wiki/findings/gpu-solver-v2.md`](wiki/findings/gpu-solver-v2.md).
+> E0 ✅ (shared grid 1.37M DOF, factor 1.22 GB); E3 ✅ (1280→531 columns,
+> ×2.41, source form beats reciprocal); E1 ✅ CPU control = 75 s/sample
+> (build 2.9 / factor 6.2 / solve 66; scipy `?pbtrf` unusable — global
+> block-Thomas used instead; GPU scan port projected 1–3 s/sample, to be
+> measured); E2 ✅ discretization parity 0.03–0.09% — the 3–5% deltas were
+> the scalar-mud convention (len512 RM log is noisy ±8%) and the shared
+> boundary truncation of v1+NGSolve. Residual E2 work: boundary-saturation
+> study + production decision on the mud convention.
+
 ### E0 — Global operator sizing (feasibility)
 - Build a **global canonical (r,z) grid** spanning the full logged interval:
   z-plateau at `h_z` across all measurement depths (+ far-field geometric pads);
@@ -152,12 +163,16 @@ Ordered by the report's do-not-invert priority: math first, kernels second.
 
 ## 7. Immediate next actions
 
-1. `scripts/gpu_v2_global_sizing.py` — E0: build the global grid + CSR, report
-   n/nnz/fill (CHOLMOD symbolic).
-2. `scripts/gpu_v2_amortize_cpu.py` — E1 CPU control: factor once, 1280 RHS in
-   blocks, amortized s/sample vs 7.65 s and ~40 s.
-3. Environment check: cuDSS availability (pip `nvidia-cudss` / headers) against
-   the box's CUDA driver + nvcc 11.8; decide binding route (Python API vs
-   `jax.ffi`).
-4. E3 audit script — unique electrode nodes + reciprocity accounting for the
-   5-tool len512 suite.
+Phase 0 items 1–4 are DONE (see status above; scripts exist under
+`scripts/gpu_v2_*.py`). Next, in order:
+
+1. **G-phase prototype:** JAX `lax.scan` port of the global block-Thomas
+   (reuse `direct.py` machinery): factor once per sample on GPU, solve the
+   531 columns as (111×111)@(111×531) GEMM sweeps, `vmap` over samples.
+   Measure s/sample vs the 7.65 s v1 baseline and the <3.06 s gate.
+2. E2 residual: boundary-saturation study (`domain_radius` sweep of the
+   global grid vs NGSolve at matched R, const-RM data) + decide the
+   production mud convention (v2's z-varying column is the more faithful
+   physics and the only one compatible with factorization reuse).
+3. cuDSS remains the fallback/comparison path (nvcc 11.8 compatibility to
+   check) — the block-Thomas scan needs no new toolchain at all.

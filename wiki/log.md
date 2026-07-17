@@ -72,3 +72,18 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - pages touched: sources/deep-research-gpu-solver.md (new),
   concepts/fem-solver.md, concepts/parallel-execution.md, overview.md, index.md.
 - follow-up artifact: `../GPU_SOLVER_V2_PLAN.md` (expanded work plan, repo root).
+
+## [2026-07-17] finding | GPU solver v2 Phase 0 — global path GO
+- Ran plan experiments E0–E3 (global_op.py + 3 scripts): sizing 1.37M DOF /
+  1.22 GB factor (shared grid 112×12315); 1280 tasks -> 531 unique RHS (×2.41);
+  CPU block-Thomas control 75 s/sample (build 2.9 / factor 6.2 / solve 66).
+- Accuracy detective story: v2-vs-v1 spikes up to 5.5% were NOT discretization
+  (h-independent; assembler ≡ apply_A to 1e-12; parity 0.03–0.09% at const RM).
+  Root causes: (1) production scalar-mud-per-solve convention vs v2's physical
+  z-varying RM column — len512 RM log is noisy ±8%, moves short normals ~5%;
+  (2) shared boundary truncation in v1+NGSolve (grows to 3.6% at R=5 points).
+  Fresh NGSolve confirmed both directions.
+- scipy ?pbtrf is reference-unblocked (~180 s @ n=2e5) — banded path dead;
+  64-thread OpenBLAS on 111×111 blocks >10× slower (pin to 1, again).
+- pages touched: findings/gpu-solver-v2.md (new), index.md, overview.md;
+  repo: remo3d/gpu_solver/global_op.py, scripts/gpu_v2_*.py, v1 core ported.
