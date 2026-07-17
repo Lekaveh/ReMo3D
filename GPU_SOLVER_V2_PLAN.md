@@ -174,15 +174,23 @@ Phase 0 items 1–4 are DONE (see status above; scripts exist under
 > latency-bound → B is the lever, bounded by the ~3 GB/sample fp32 forward
 > stack. Bench: `scripts/gpu_v2_global_gpu_bench.py`.
 
+> **E2 CLOSED + G2 partial (2026-07-17).** Boundary sweep: truncation error
+> ~1/R²; v1's 10·span (R=90) = up to 6.2 % at A8.0 edges; adopted default
+> **max(80·span, 45)** → ≤0.07 % for +14 % DOF (+0.10 s/sample). Adopted
+> **z-varying mud column** as the production convention. 2×A6000: 100
+> optim_bench samples in 54.4 s wall (warm 0.37 s/sample combined, ×32 vs
+> Vd); **~140 J/sample**. Stored optim_bench/len512 reference logs carry
+> R-truncation + batch=5 error → recompute regression baselines.
+> Details: wiki/findings/gpu-solver-v2.md.
+
 Next, in order:
 
-1. E2 residual: boundary-saturation study (`domain_radius` sweep of the
-   global grid vs NGSolve at matched R, const-RM data) + decide the
-   production mud convention (v2's z-varying column is the more faithful
-   physics and the only one compatible with factorization reuse).
-2. G2 hardening: full validation ladder (Ex1 + fresh-NGSolve subset),
-   100-sample benchmark with energy/sample, multi-GPU sharding by sample
-   batches, driver API integration.
-3. Optional tuning: larger B via k-chunked forward stack; scan `unroll`;
-   per-tool grids to shrink m. cuDSS stays a comparison path only — the
-   scan port needed no new toolchain.
+1. G2 remainder: full validation ladder (Ex1 8 tools × 251 depths +
+   fresh-NGSolve subset at matched conventions), driver API integration
+   (`compute_logs_gpu(..., global_solver=True)`), regression-baseline
+   recompute (unbatched large-R NGSolve or v2 fp64).
+2. Optional tuning: larger B via k-chunked forward stack; scan `unroll`;
+   per-tool grids to shrink m; 3rd GPU when free. cuDSS stays a comparison
+   path only — the scan port needed no new toolchain.
+3. Strategic follow-on (G7 of the original table): adjoint solves on the
+   same factorization → cheap Fréchet kernels for sensitivity/DOI/inversion.

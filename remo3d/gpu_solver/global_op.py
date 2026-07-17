@@ -199,7 +199,12 @@ def build_global_tasks(tools, depths, formation, borehole, h_min=None,
     if h_min is None:
         h_min = min(gtool.default_h_min(c) for c in cfgs.values())
     if domain_radius is None:
-        domain_radius = max(max(10.0 * c["span"], 5.0) for c in cfgs.values())
+        # 80*span, not v1's 10*span: the boundary sweep (gpu_v2_boundary_sweep)
+        # measured 6.2% truncation error at 10*span for A8.0 vs 0.065% at
+        # 80*span, and far-field nodes are logarithmic (~+14% DOF). NOTE:
+        # matched-convention comparisons against v1/NGSolve production logs
+        # must pass their truncated radius (max(10*span, 5)) explicitly.
+        domain_radius = max(max(80.0 * c["span"], 45.0) for c in cfgs.values())
 
     depths = np.asarray(depths, dtype=float)
     elec = []

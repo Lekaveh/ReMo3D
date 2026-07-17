@@ -50,6 +50,7 @@ OUT = ROOT / "benchmark_data" / "gpu_solver" / "global_optim_bench.npz"
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--samples", type=int, default=100)
+    ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--batch", type=int, default=10)
     args = ap.parse_args(argv)
 
@@ -60,8 +61,9 @@ def main(argv=None):
     assert ref_tools == TOOLS
 
     n = args.samples
+    s0 = args.start
     fs, bs = [], []
-    for si in range(n):
+    for si in range(s0, s0 + n):
         d = np.load(SAMPLES_DIR / f"sample_{si}.npz", allow_pickle=True)
         fs.append(np.asarray(d["formation_model"], float))
         bs.append(np.asarray(d["borehole_model"], float))
@@ -99,14 +101,16 @@ def main(argv=None):
             for ti, t in enumerate(TOOLS):
                 logs[si, ti] = sample_logs[t]
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(OUT, logs=logs, depths=depths, tools=TOOLS,
-                        n_samples=n)
+    out = (OUT if s0 == 0 else
+           OUT.with_name(OUT.stem + f"_s{s0}" + OUT.suffix))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out, logs=logs, depths=depths, tools=TOOLS,
+                        n_samples=n, start=s0)
 
     warm = times[1:] or times
     per = float(np.mean(warm)) / B
-    v1_t = float(np.mean(ref["V1_baseline"]["wall_time"][:n]))
-    vd_t = float(np.mean(ref["Vd_direct_forced"]["wall_time"][:n]))
+    v1_t = float(np.mean(ref["V1_baseline"]["wall_time"][s0:s0 + n]))
+    vd_t = float(np.mean(ref["Vd_direct_forced"]["wall_time"][s0:s0 + n]))
     print(f"\nTIME: v2 GPU warm {per:.2f} s/sample "
           f"| V1 CG pipeline {v1_t:.2f}s (x{v1_t / per:.0f}) "
           f"| Vd forced-direct {vd_t:.2f}s (x{vd_t / per:.0f}) "
@@ -114,15 +118,15 @@ def main(argv=None):
 
     print("\nACCURACY vs stored pipeline logs (rel):")
     for name in ("Vd_direct_forced", "V1_baseline"):
-        rl = np.asarray(ref[name]["logs"], float)[:n]
+        rl = np.asarray(ref[name]["logs"], float)[s0:s0 + n]
         rel = np.abs(logs - rl) / np.abs(rl)
         line = "  ".join(
             f"{t}: max {np.nanmax(rel[:, ti]):.2%} "
             f"mean {np.nanmean(rel[:, ti]):.3%}"
             for ti, t in enumerate(TOOLS))
         print(f"  vs {name:16s}: {line}")
-    rl1 = np.asarray(ref["V1_baseline"]["logs"], float)[:n]
-    rld = np.asarray(ref["Vd_direct_forced"]["logs"], float)[:n]
+    rl1 = np.asarray(ref["V1_baseline"]["logs"], float)[s0:s0 + n]
+    rld = np.asarray(ref["Vd_direct_forced"]["logs"], float)[s0:s0 + n]
     spread = np.abs(rl1 - rld) / np.abs(rld)
     print(f"  context: V1-vs-Vd internal spread max {np.nanmax(spread):.2%} "
           f"mean {np.nanmean(spread):.3%}")

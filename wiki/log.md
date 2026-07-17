@@ -114,3 +114,14 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   + small boundary residual at the well edge for A8.0.
 - pages touched: findings/gpu-solver-v2.md (optim_bench section);
   repo: scripts/gpu_v2_optim_bench.py.
+
+## [2026-07-17] finding | E2 closed (boundary) + conventions + 2-GPU/energy
+- Boundary sweep (gpu_v2_boundary_sweep.py): truncation ~1/R^2; v1 convention
+  10*span (R=90) = 6.2% worst (A8.0 edges); adopted default max(80*span,45)
+  -> 0.065% for +14% DOF. global_op default changed accordingly.
+- Adopted production conventions: z-varying mud column; large-R boundary.
+  Stored optim_bench refs (R=90 + batch=5) now diverge more at A8.0 edges
+  (27% max) BECAUSE v2 improved -> regression baselines need recompute.
+- 2x A6000: 100 samples in 54.4s wall (0.74 s/sample/GPU warm at R=720;
+  combined 0.37 s/sample = x32 vs Vd); energy ~140 J/sample (257 W mean).
+- pages touched: findings/gpu-solver-v2.md (E2/G2 sections, verdict), plan.

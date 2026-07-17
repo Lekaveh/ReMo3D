@@ -146,14 +146,49 @@ In matched conventions v2 agrees with fresh NGSolve to **0.3–1.1 %** at
 every arbitrated point — discretization-level, consistent with the Phase 0
 parity result.
 
+## E2 closed — boundary saturation; adopted conventions
+
+`scripts/gpu_v2_boundary_sweep.py` (optim workload, samples s0 + s24, worst
+over 5 tools × 128 depths, error vs R=2880):
+
+| R | 45 | 90 (v1 conv.) | 180 | 360 | 720 | 1440 |
+|---|--:|--:|--:|--:|--:|--:|
+| worst truncation | 19.6 % | **6.2 %** | 1.6 % | 0.36 % | **0.065 %** | 0.029 % |
+
+Error decays ~×4 per doubling of R (≈1/R²), dominated by A8.0 at the well
+edges; far-field nodes are logarithmic — R=90→720 costs only +14 % DOF
+(798k→910k) and +0.10 s/sample.
+
+**Adopted conventions (production decisions):**
+1. `domain_radius` default = **max(80·span, 45)** (→720 here): truncation
+   ≤0.07 %, safely below the ~0.3 % discretization envelope. The v1/NGSolve
+   production convention (10·span) carries up to ~6 % at long-tool edge
+   points; matched-convention comparisons must pass it explicitly.
+2. **z-varying mud column** (the physical RM log): the only convention
+   compatible with factorization reuse, and the more faithful physics.
+3. Consequence: v2-vs-stored-reference maxima *grow* at A8.0 edges (to
+   ~27 %) because v2 got more accurate while the stored refs keep R=90
+   truncation + batch_size=5 meshes. **Regression baselines should be
+   recomputed** (unbatched, large-R NGSolve — or v2 fp64).
+
+## G2 (partial) — multi-GPU throughput + energy
+
+Two A6000s concurrently (50 samples each, B=10, R=720): **100 samples in
+54.4 s wall** including per-process compile (~14 s); warm 0.74 s/sample/GPU
+→ combined warm throughput **0.37 s/sample** ≈ ×32 vs Vd forced-direct.
+Power during the run: GPU0+1 mean 257 W → **~140 J/sample** (nvidia-smi
+0.5 s polling, compile included). The CPU pipeline's J/sample is not yet
+measured (order-of-magnitude estimate at 40 s × node power ≫ this).
+
 ## Verdict
 
 **Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS
 amortization ×2.41 on top of factor-once, discretization at parity with v1,
-accuracy differences understood (and favor v2), and the GPU implementation
-beats the gate by ×2.2. Remaining for production (G2+): boundary-saturation
-study, mud-convention decision, multi-GPU sharding by sample batches,
-validation ladder + regression gates, energy/sample logging.
+accuracy differences understood (and favor v2), the GPU implementation beats
+the gate by ×2.2, boundary and mud conventions decided and measured, 2-GPU
+sharding demonstrated. Remaining for production: full validation ladder
+(Ex1 + fresh-NGSolve subset), driver API integration, regression-baseline
+recompute, 3rd-GPU sharding when the card frees up.
 
 ## Links
 
