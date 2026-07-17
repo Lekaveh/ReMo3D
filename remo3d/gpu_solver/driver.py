@@ -299,7 +299,8 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
                      backend="fv", h_min=None, growth=1.15,
                      domain_radius=None, dtype=jnp.float64,
                      tol=1e-8, maxiter=None, batch_size=None,
-                     precond="mg", shared_grid=False, verbose=False):
+                     precond="mg", shared_grid=False, global_solver=False,
+                     precision="mixed", verbose=False):
     """GPU forward modelling for a list of tools over measurement depths.
 
     Parameters mirror Model.compute_synthetic_logs where they overlap;
@@ -312,6 +313,15 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
     in a single nested-vmap batch (one hierarchy, one compilation, sigma
     sampled once per depth on the GPU) — the fast path for multi-tool sweeps.
 
+    global_solver=True is the v2 path (RECOMMENDED — see
+    GPU_SOLVER_V2_PLAN.md / wiki findings/gpu-solver-v2): ONE global grid
+    over the whole logged interval, factor once, all (tool, depth) tasks as
+    deduplicated RHS columns. Conventions differ from the per-depth paths:
+    z-varying mud column and a far boundary (domain_radius default
+    max(80*span, 45)). `precision` is "mixed" (fp64 factor recursion, fp32
+    solves; Ra error ~4e-5) or "f64"; `dtype`/`tol`/`precond`/`batch_size`/
+    `backend` are ignored on this path.
+
     Returns
     -------
     logs : dict tool -> ndarray (n_depths, 2) with [:, 0]=depth, [:, 1]=R_a.
@@ -323,6 +333,27 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
     formation = _load_formation(list(tools), formation_model)
     borehole = _load_borehole(list(tools), borehole_model,
                               borehole_geometry_type=borehole_geometry_type)
+
+    if global_solver:
+        from . import global_op, global_gpu
+        t0 = time.perf_counter()
+        problem = global_op.build_global_tasks(
+            tools, measurement_depths, formation, borehole,
+            h_min=h_min, domain_radius=domain_radius, growth=growth)
+        solver = global_gpu.make_solver(problem, precision=precision)
+        X0 = solver(np.asarray(formation, float)[None],
+                    np.asarray(borehole, float)[None])
+        ra = global_gpu.extract_logs(problem, X0)[0]
+        if verbose:
+            nr, nz = len(problem["r_nodes"]), len(problem["z_nodes"])
+            print(f"[gpu_solver] global: grid {nr}x{nz} "
+                  f"(h_min={problem['h_min']:.4g}, "
+                  f"R={problem['domain_radius']:.1f}), "
+                  f"{problem['n_tasks']} tasks -> "
+                  f"{len(problem['uniq_src'])} RHS | "
+                  f"{time.perf_counter() - t0:.1f}s incl. compile")
+        depths = problem["depths"]
+        return {t: np.column_stack([depths, ra[t]]) for t in tools}
 
     if shared_grid:
         # One shared grid per radius bucket (a single grid for tools of very

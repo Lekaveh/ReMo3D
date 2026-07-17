@@ -52,7 +52,9 @@ def main(argv=None):
     ap.add_argument("--samples", type=int, default=100)
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--batch", type=int, default=10)
+    ap.add_argument("--dtype", choices=["mixed", "f64"], default="mixed")
     args = ap.parse_args(argv)
+    precision = args.dtype if args.dtype == "f64" else "mixed"
 
     ref = {v: np.load(PIPE_DIR / f"{v}.npz", allow_pickle=True)
            for v in ("V1_baseline", "Vd_direct_forced")}
@@ -75,7 +77,7 @@ def main(argv=None):
     print(f"grid {len(p['r_nodes'])}x{len(p['z_nodes'])} "
           f"n_free={p['n_free']:,} k={len(p['uniq_src'])} "
           f"(dedup x{p['n_tasks'] / len(p['uniq_src']):.2f})", flush=True)
-    solver = global_gpu.make_solver(p, precision="mixed")
+    solver = global_gpu.make_solver(p, precision=precision)
 
     B = args.batch
     logs = np.empty((n, len(TOOLS), len(depths)))
@@ -101,8 +103,10 @@ def main(argv=None):
             for ti, t in enumerate(TOOLS):
                 logs[si, ti] = sample_logs[t]
 
-    out = (OUT if s0 == 0 else
-           OUT.with_name(OUT.stem + f"_s{s0}" + OUT.suffix))
+    suffix = ("" if s0 == 0 else f"_s{s0}") + (
+        "_f64" if precision == "f64" else "")
+    out = (OUT if not suffix else
+           OUT.with_name(OUT.stem + suffix + OUT.suffix))
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, logs=logs, depths=depths, tools=TOOLS,
                         n_samples=n, start=s0)

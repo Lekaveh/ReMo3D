@@ -125,3 +125,13 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - 2x A6000: 100 samples in 54.4s wall (0.74 s/sample/GPU warm at R=720;
   combined 0.37 s/sample = x32 vs Vd); energy ~140 J/sample (257 W mean).
 - pages touched: findings/gpu-solver-v2.md (E2/G2 sections, verdict), plan.
+
+## [2026-07-17] finding | G2: Ex1 ladder passed + driver API integrated
+- Full Ex1 (8 tools incl. laterals x 251 depths) on ONE global grid (906k DOF,
+  2008 tasks -> 818 RHS, x2.45): overall max 1.00% vs frozen Results_1.txt,
+  per-tool means 0.08-0.25% — matches v1's validated envelope; laterals fine;
+  matched-R vs default-R < 0.005% apart (Ex1 boundary-insensitive).
+- Driver: compute_logs_gpu(..., global_solver=True, precision="mixed"|"f64")
+  returns the standard logs contract; verified vs bench path (6.7e-5).
+- v2-fp64 regression-baseline recompute (100 optim samples) launched.
+- pages touched: findings/gpu-solver-v2.md (G2 section, verdict).

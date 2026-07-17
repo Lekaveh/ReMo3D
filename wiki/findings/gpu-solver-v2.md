@@ -180,15 +180,34 @@ Power during the run: GPU0+1 mean 257 W → **~140 J/sample** (nvidia-smi
 0.5 s polling, compile included). The CPU pipeline's J/sample is not yet
 measured (order-of-magnitude estimate at 40 s × node power ≫ this).
 
+## G2 — Ex1 validation ladder + driver API
+
+**Full Ex1** (8 tools incl. laterals × 251 depths, invasion blanked, smooth
+RM → mud convention moot) on ONE global grid — no radius bucketing, unlike
+v1's depth-relative grids (`scripts/gpu_v2_full_ex1.py`): grid 114×8017,
+906k DOF, 2008 tasks → 818 RHS (dedup ×2.45), ~19.5 s incl. compile.
+vs frozen `Results_1.txt`: **overall max 1.00 % (M1.0A0.1B), per-tool means
+0.08–0.25 %** — matches v1's validated envelope (1.05–1.2 %), laterals
+included. Matched-R (110) and default-R (880) agree to <0.005 % here, so
+the frozen-reference comparison is boundary-insensitive on Ex1.
+
+**Driver API**: `compute_logs_gpu(..., global_solver=True,
+precision="mixed"|"f64")` — same result contract as
+`Model.compute_synthetic_logs` (`logs[tool] = [depth, Ra]` columns);
+verified against the bench path (6.7e-5, fp32 batching noise).
+`dtype/tol/precond/batch_size/backend` are ignored on this path; conventions
+are v2's (z-varying mud, far boundary).
+
 ## Verdict
 
 **Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS
 amortization ×2.41 on top of factor-once, discretization at parity with v1,
 accuracy differences understood (and favor v2), the GPU implementation beats
 the gate by ×2.2, boundary and mud conventions decided and measured, 2-GPU
-sharding demonstrated. Remaining for production: full validation ladder
-(Ex1 + fresh-NGSolve subset), driver API integration, regression-baseline
-recompute, 3rd-GPU sharding when the card frees up.
+sharding demonstrated, **Ex1 ladder passed (max 1.00 %) and the driver API
+integrated**. Remaining for production: regression-baseline recompute
+(v2-fp64 run in progress), fresh-NGSolve matched-convention subset for the
+record, 3rd-GPU sharding when the card frees up.
 
 ## Links
 
