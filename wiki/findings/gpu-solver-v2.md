@@ -116,6 +116,36 @@ with Phase 0: the deep-research report's central bet is **confirmed
 end-to-end** — the ×5.2 "ceiling" of v1 falls to an architecture change on
 the same hardware, with no CUDA C++ and no new toolchain.
 
+## Cross-check on the optim_bench workload (100 samples, 5 tools × 128 depths)
+
+`scripts/gpu_v2_optim_bench.py`, run 2026-07-17 against the stored
+`benchmark_data/optim_bench/full_pipeline` references (the real MPI
+pipeline, batch_size=5).
+
+**Time** (warm, B=10, single A6000; grid 112×7195, 798k DOF, 275 unique RHS
+= ×2.33 dedup): **0.64 s/sample** — ×65 vs the V1 CG baseline (41.25 s),
+×19 vs Vd forced-direct (11.84 s), ×15 vs the axis-study pinned-direct b5
+(9.60 s). Compile 13.9 s once.
+
+**Accuracy vs stored logs**: mean 1.2–1.7 %, max 10–20 % — and the
+arbitration (fresh NGSolve at the worst points, matched const-RM
+convention) decomposes it exactly as Phase 0 predicts, plus one NEW term:
+
+1. **Mud convention** (dominant broad term; this dataset's RM log is noisy
+   ±4 %): e.g. A1.0 s56 z=4.8 — stored 4.386 vs v2 3.888 collapses to NG
+   4.130 vs v2 4.145 (**0.36 %**) at const RM.
+2. **The reference's own batch_size=5 error**: at A8.0 s24 z=25.4 the
+   stored log (2.324) is **15 % off a fresh unbatched same-convention
+   NGSolve (2.727)**, which lands next to v2 (2.793). The stored pipeline
+   logs are *not* point-exact — the mesh is shared across 5 depths with up
+   to (B−1)·dz/2 = 0.4 m geometric offset.
+3. Small boundary residual for the longest tool at the well edge (NG cRM
+   moves +3.6 % when R is doubled at A8.0 s24 z=25.4).
+
+In matched conventions v2 agrees with fresh NGSolve to **0.3–1.1 %** at
+every arbitrated point — discretization-level, consistent with the Phase 0
+parity result.
+
 ## Verdict
 
 **Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS

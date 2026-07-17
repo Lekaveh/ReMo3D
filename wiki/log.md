@@ -101,3 +101,16 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - pages touched: findings/gpu-solver-v2.md (G1 section + verdict), index.md,
   overview.md; repo: remo3d/gpu_solver/global_gpu.py,
   scripts/gpu_v2_global_gpu_bench.py, global_op.py refactor (build_global_tasks).
+
+## [2026-07-17] query | v2 GPU on optim_bench — 0.64 s/sample, x65/x19/x15
+- Ran the global mixed-precision solver on the 100-sample optim_bench workload
+  (5 tools x 128 depths): warm 0.64 s/sample (B=10), grid 112x7195, 798k DOF,
+  275 unique RHS (x2.33). vs V1 CG 41.25s = x65; Vd forced-direct 11.84s = x19;
+  axis pinned b5 9.60s = x15.
+- Accuracy vs stored pipeline logs: mean 1.2-1.7%, max 10-20%. Arbitrated worst
+  points (fresh NGSolve, const-RM): matched-convention agreement 0.3-1.1%.
+  Decomposition: mud convention (noisy RM +-4%) + the stored references' OWN
+  batch_size=5 error (up to 15% at A8.0 s24 z=25.4 vs fresh unbatched NGSolve)
+  + small boundary residual at the well edge for A8.0.
+- pages touched: findings/gpu-solver-v2.md (optim_bench section);
+  repo: scripts/gpu_v2_optim_bench.py.
