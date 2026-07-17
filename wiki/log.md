@@ -173,3 +173,13 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   b=5 — a batch-1 baseline run, per the user, would be the cleaner target).
 - pages touched: findings/gpu-solver-v2.md (cross-check item 2/3 rewritten,
   compat section updated); driver/bench/global_gpu R handling.
+
+## [2026-07-17] finding | Compat vs fresh b=1 pipeline: mean 0.269% — done
+- Ran Ax_sec1_b1_cndT_dir (real MPI pipeline, batch=1, direct, SEC, R=40) on
+  all 100 samples (29.23 s/sample, nan=0) as the clean reference.
+- compat(R=40) vs b=1: overall mean 0.269%, maxima 2.9-4.3% — the same order
+  as the stored b=5 logs' own spread vs b=1 (mean 0.277%, maxima to 8.5%).
+  The GPU compat mode matches the unbatched CPU pipeline as closely as the
+  CPU matches itself across a batching change. native(R720): 1.48% mean =
+  the documented convention delta. Compat is x4.3 faster than the b=1 run.
+- pages touched: findings/gpu-solver-v2.md (definitive-check table).

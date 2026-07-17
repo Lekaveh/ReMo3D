@@ -259,10 +259,27 @@ R=80→0.4559; compat 0.4566; the stored R=40 log 0.4544 is already near the
 limit). A per-depth z-window is not imitable in a factor-once architecture;
 at R≥40 the point is moot.
 
+**Definitive check — fresh b=1 pipeline reference** (`Ax_sec1_b1_cndT_dir`,
+the real MPI pipeline, unbatched, direct, SEC, R=40; 29.23 s/sample,
+100 samples, nan=0):
+
+| vs the b=1 reference | overall mean | maxima |
+|---|--:|--:|
+| **compat (R=40)** | **0.269 %** | 2.9–4.3 % |
+| stored Vd (b=5) | 0.277 % | 3.8–8.5 % |
+| native v2 (R=720, physical mud) | 1.48 % | up to 27.8 % (conventions, by design) |
+
+**The GPU compat mode matches the unbatched CPU pipeline as closely as the
+CPU pipeline matches itself across a batching change** — mission
+accomplished for "должен совпадать с CPU". The residual 3–4 % isolated
+maxima are at the FV-vs-FEM discretization envelope at extreme contrast
+points (same order as the pipeline's own batching spread).
+
 **Cost:** 6.8 s/sample warm (B=4, kc=96, lax.map-sequential chunks) —
-faster than every CPU config (Vd 11.84 s), ~10× slower than native v2;
-the refinement temporaries limit B (XLA buffer bloat — optimization TODO).
-Driver: `compute_logs_gpu(..., global_solver=True, convention="cpu")`.
+×4.3 faster than the b=1 pipeline (29.2 s) and faster than every batched
+CPU config (Vd b=5: 11.84 s); ~10× slower than native v2; the refinement
+temporaries limit B (XLA buffer bloat — optimization TODO). Driver:
+`compute_logs_gpu(..., global_solver=True, convention="cpu")`.
 
 ## Verdict
 
