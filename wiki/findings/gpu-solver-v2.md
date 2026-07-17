@@ -134,13 +134,19 @@ convention) decomposes it exactly as Phase 0 predicts, plus one NEW term:
 1. **Mud convention** (dominant broad term; this dataset's RM log is noisy
    ±4 %): e.g. A1.0 s56 z=4.8 — stored 4.386 vs v2 3.888 collapses to NG
    4.130 vs v2 4.145 (**0.36 %**) at const RM.
-2. **The reference's own batch_size=5 error**: at A8.0 s24 z=25.4 the
-   stored log (2.324) is **15 % off a fresh unbatched same-convention
-   NGSolve (2.727)**, which lands next to v2 (2.793). The stored pipeline
-   logs are *not* point-exact — the mesh is shared across 5 depths with up
-   to (B−1)·dz/2 = 0.4 m geometric offset.
-3. Small boundary residual for the longest tool at the well edge (NG cRM
-   moves +3.6 % when R is doubled at A8.0 s24 z=25.4).
+2. **The references' FIXED domain_radius=40 convention** (harness flag;
+   `simulate_logs`' production default is 50) — not the per-tool
+   max(10·span, 5) rule this section's first arbitration assumed. At A8.0
+   s24 z=25.4 a fresh unbatched NGSolve **at R=40** sits 0.3 % from the
+   stored log — the "15 % reference error" originally claimed here compared
+   against R=90 and was a convention mismatch on OUR side (user-caught;
+   corrected 2026-07-17).
+3. **The stored files' batch_size=5**: at isolated contrast points the
+   stored logs sit 6.7–8.5 % off their own unbatched R=40 convention
+   (verified at three points; the compat mode lands 0.19–0.32 % from the
+   unbatched values). The detached rerun logs record CLI batch_size=5; a
+   batch-1 baseline run may exist elsewhere and would be the cleaner
+   comparison target.
 
 In matched conventions v2 agrees with fresh NGSolve to **0.3–1.1 %** at
 every arbitrated point — discretization-level, consistent with the Phase 0
@@ -231,24 +237,32 @@ and blow the memory peak).
 **Exactness vs its own convention:** worst **5.2e-5** against per-column
 scalar-mud factorizations (native precision floor).
 
-**vs stored pipeline logs (100 samples):** means drop to 0.34–1.4 %
-(native: 1.2–1.9 %); residual maxima are the references' own batch_size=5
-and truncation errors.
+**Boundary in compat mode = the pipeline's FIXED radius** (user-caught
+correction 2026-07-17: the stored references ran with domain_radius=40, and
+`simulate_logs`' production default is a fixed 50 — not the per-tool
+max(10·span, 5) rule first assumed; the driver default for
+`convention="cpu"` is 50, pass the run's value to match a specific dataset).
 
-**vs fresh unbatched NGSolve** (samples 0 & 56, every 4th depth): sample 0
-(normal mud) — short tools ≤1.0 %, A8.0 0.60 %. Sample 56 (RM≈0.15, salt
-mud; 31/100 samples have mean RM<0.5) — short tools disagree by up to 40 %,
-and the R-sweep proves whose error it is: **NGSolve converges to the compat
-value as its window grows** (A0.4 z=24.8: R=5→0.763, R=20→0.469,
-R=80→0.4559 vs compat 0.4566). The pipeline's per-depth ±R z-window is
-untruncatable-imitable in a factor-once architecture *and* carries up to
-~67 % error of its own in the conductive-channel regime — documented as the
-one intentional non-match.
+**vs stored pipeline logs (100 samples, R=40): overall mean 0.449 %**
+(per-tool means 0.33–0.66 %; native mode: 1.2–1.9 %). Residual maxima
+4.4–9.4 % at isolated contrast points are the STORED files' batch_size=5
+error: there the compat value sits 0.19–0.32 % from a fresh unbatched
+NGSolve at R=40 while the stored value is 6.7–8.5 % off (verified at the
+three worst points).
 
-**Cost:** 6.90 s/sample warm (B=4, kc=96) — still faster than every CPU
-config (Vd 11.84 s), ~10× slower than native v2 (0.64 s); the refinement
-temporaries limit B (XLA buffer bloat — optimization TODO). Driver:
-`compute_logs_gpu(..., global_solver=True, convention="cpu")`.
+**The z-window caveat** (relevant only to small-R configurations such as
+the per-tool auto rule used by v1/len512, NOT to these R=40 refs): for
+conductive muds (31/100 samples have mean RM<0.5) a small per-depth window
+carries large truncation error of its own — NGSolve converges to the v2
+value as its window grows (A0.4 s56 z=24.8: R=5→0.763, R=20→0.469,
+R=80→0.4559; compat 0.4566; the stored R=40 log 0.4544 is already near the
+limit). A per-depth z-window is not imitable in a factor-once architecture;
+at R≥40 the point is moot.
+
+**Cost:** 6.8 s/sample warm (B=4, kc=96, lax.map-sequential chunks) —
+faster than every CPU config (Vd 11.84 s), ~10× slower than native v2;
+the refinement temporaries limit B (XLA buffer bloat — optimization TODO).
+Driver: `compute_logs_gpu(..., global_solver=True, convention="cpu")`.
 
 ## Verdict
 

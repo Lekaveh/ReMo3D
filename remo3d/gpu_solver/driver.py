@@ -325,9 +325,11 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
         (domain_radius max(80*span, 45));
       "cpu" — imitate the CPU pipeline where architecturally possible:
         scalar mud RM(z_sim) per task (mud-split operator + Neumann series
-        on one factorization, exact to ~5e-5) and the v1 boundary radius
-        max(10*span, 5). NOT imitable: the pipeline's per-depth z-window
-        truncation — on conductive-mud models its own error reaches tens of
+        on one factorization, exact to ~5e-5) and the pipeline's FIXED
+        domain radius (simulate_logs default 50; pass domain_radius to
+        match a specific run — e.g. the optim_bench references used 40).
+        NOT imitable: the pipeline's per-depth z-window truncation — for a
+        small R on conductive-mud models its own error reaches tens of
         percent (fresh NGSolve converges to the v2 value as its window
         grows), so residual differences remain exactly where the pipeline
         itself is unconverged.
@@ -349,8 +351,7 @@ def compute_logs_gpu(tools, measurement_depths, formation_model,
         from . import tool as gtool
         t0 = time.perf_counter()
         if convention == "cpu" and domain_radius is None:
-            domain_radius = max(max(10.0 * gtool.tool_config(t)["span"], 5.0)
-                                for t in tools)
+            domain_radius = 50.0        # simulate_logs' fixed-R default
         problem = global_op.build_global_tasks(
             tools, measurement_depths, formation, borehole,
             h_min=h_min, domain_radius=domain_radius, growth=growth)

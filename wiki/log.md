@@ -158,3 +158,18 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   native 0.64 s. ngsolve_protocol.npz saved as the clean reference subset.
 - pages touched: findings/gpu-solver-v2.md (compat section); driver
   convention arg; scripts gpu_v2_ngsolve_protocol/compat_report.
+
+## [2026-07-17] fix | Reference conventions corrected (user-caught): fixed R=40
+- User flagged the batching attribution; verification showed the stored
+  full_pipeline refs ran with FIXED domain_radius=40 (harness flag; production
+  simulate_logs default is fixed 50) — NOT per-tool max(10*span,5). The "15%
+  reference batching error" and the "40% s56" protocol numbers were OUR
+  R-convention mismatches; fresh unbatched NG@R40 sits 0.3% from the stored
+  A8.0 point, and the stored conductive-channel point was near-converged.
+- Compat mode switched to fixed R (bench 40 / driver default 50). Rerun of all
+  100 samples: overall mean 0.449% vs stored refs; residual maxima 4.4-9.4%
+  are the stored files' OWN batch_size=5 error (compat matches unbatched
+  NG@R40 to 0.19-0.32% at the three worst points; detached logs record CLI
+  b=5 — a batch-1 baseline run, per the user, would be the cleaner target).
+- pages touched: findings/gpu-solver-v2.md (cross-check item 2/3 rewritten,
+  compat section updated); driver/bench/global_gpu R handling.

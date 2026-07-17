@@ -185,8 +185,9 @@ def make_solver(problem, precision="mixed", mud="log", n_refine=3,
         every column's own mu exactly (caliper-crossing cells are linearized
         around mu_ref; |mu - mu_ref| <~ 5% makes the quadratic residue
         negligible and the refinement contraction ~|dmu|/mu per sweep).
-        Combine with domain_radius = max(10*span, 5) in build_global_tasks
-        to match the CPU boundary convention as well.
+        Combine with the pipeline's FIXED domain_radius in
+        build_global_tasks (simulate_logs default 50; e.g. the optim_bench
+        reference runs used 40) to match the CPU boundary convention too.
     Returns solve(formations, boreholes) -> X0 (B, n_rows, k) device array;
     formations/boreholes are stacked (B, ...) sample arrays.
     """

@@ -79,10 +79,10 @@ def main(argv=None):
           f"{len(TOOLS)} tools x {len(depths)} depths "
           f"[{args.convention} convention]", flush=True)
     if args.convention == "cpu":
-        from remo3d.gpu_solver import tool as gtool
-        R = max(max(10.0 * gtool.tool_config(t)["span"], 5.0) for t in TOOLS)
+        # the stored full_pipeline references ran with the harness's fixed
+        # domain_radius=40.0 (simulate_logs' production default is 50)
         p = global_op.build_global_tasks(TOOLS, depths, fs[0], bs[0],
-                                         domain_radius=R)
+                                         domain_radius=40.0)
         solver = global_gpu.make_solver(p, precision=precision, mud="cpu",
                                         chunk_cols=96)
     else:
