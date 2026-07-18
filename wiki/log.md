@@ -196,3 +196,11 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - raw/assets/cpu-vs-gpu-mud.svg: CPU per-depth constant-mud windows (R=40)
   vs the v2 global problem (true RM(z) profile, 531 RHS, R=720), with both
   pipelines and timings; embedded in findings/gpu-solver-v2.md (compat section).
+
+## [2026-07-18] query | R-sweep logs plotted (A8.0, s24/s66) + parallel NGSolve helper
+- Full-log R-sweep (NGSolve R=40/80/160/720, 32 depths, 20-proc pool, 2.5 min
+  vs 33 min sequential) vs v2 native; figures raw/assets/rsweep-a8-s{24,66}.png,
+  embedded in findings/gpu-solver-v2.md.
+- s66: max |NG-v2| 18.6% (R=40) -> 1.6% (R=720) — full convergence onto v2.
+- s24 (conductive, RM~0.3): 20.4% -> plateau ~6.5% max / 1.6% mean — the
+  R-independent remainder is the mud convention (removed by compat mode).
