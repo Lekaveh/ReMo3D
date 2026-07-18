@@ -281,7 +281,24 @@ CPU config (Vd b=5: 11.84 s); ~10× slower than native v2; the refinement
 temporaries limit B (XLA buffer bloat — optimization TODO). Driver:
 `compute_logs_gpu(..., global_solver=True, convention="cpu")`.
 
-## Verdict
+## Closing cross-validation: CPU at R=720 lands on v2
+
+User question: does raising the CPU pipeline's radius to 720 make the
+disagreement minimal? Yes — measured on the 3 worst samples (24/66/48),
+5 tools × (worst depth + 2 controls), fresh NGSolve at R=720 (~21 s/solve,
+428k DOF):
+
+| comparison | mean | max |
+|---|--:|--:|
+| v2-native vs CPU@R40 (b=1) | 1.48 % | **27.8 %** |
+| v2-native vs **CPU@R720** | 2.02 %* | **11.1 %** — remaining rows are all short/mid tools at RM-jump points = the mud convention |
+| v2 scalar-mud vs **CPU@R720** | **0.23 %** | **1.07 %** — pure FV-vs-FEM discretization floor |
+
+*mean over the worst-point subset, not the full grid. The long-tool
+boundary effect is fully confirmed in-place: e.g. A8.0 s66 z=13.0 moves
+1.772 (R=40) → 2.180 (R=720) vs v2 2.178; s24 z=25.4: 2.317 → 2.862 vs
+v2 2.960 (residual = mud). CPU at R=720 costs ~21 s per single solve —
+v2 delivers the same converged answer at 0.74 s per 640-task sample.
 
 **Global path: CONFIRMED** (was: GO pending GPU timing). Memory trivial, RHS
 amortization ×2.41 on top of factor-once, discretization at parity with v1,

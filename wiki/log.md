@@ -183,3 +183,11 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   CPU matches itself across a batching change. native(R720): 1.48% mean =
   the documented convention delta. Compat is x4.3 faster than the b=1 run.
 - pages touched: findings/gpu-solver-v2.md (definitive-check table).
+
+## [2026-07-18] query | CPU at R=720 cross-validation — decomposition closed
+- 3 worst samples x 5 tools x 3 depths, fresh NGSolve at R=720: v2-native max
+  drops 27.8% -> 11.1% (remaining = mud convention at RM jumps); v2 with
+  scalar mud at R=720 matches CPU@720 to mean 0.23% / max 1.07% (pure
+  discretization floor). Long-tool boundary effect confirmed point-by-point
+  (A8.0 s66 z=13: CPU 1.772@R40 -> 2.180@R720 vs v2 2.178).
+- pages touched: findings/gpu-solver-v2.md (closing cross-validation).
