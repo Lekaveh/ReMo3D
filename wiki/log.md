@@ -227,3 +227,16 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   0.37%/4.5% (interp electrodes), 2.5cm 0.46%/7.5%; 2cm run twice ->
   bit-identical (0.00e+00) — GPU path deterministic.
 - Figures raw/assets/hladder-s{0,24,45,48,56,66,86,98}.png.
+
+## [2026-07-18] finding | Resolution ladder closed: 0.2 mm .. 20 cm (3 decades)
+- h=0.2 mm (22.3M DOF, 127x177189; log-path column chunking added for the
+  177k-row forward stack): vs default 5 mm mean 0.028% / max 0.32% — the
+  convergence plateau extends a full decade below default. 1704 s for 8
+  samples (213 s/sample, B=1).
+- Full ladder vs 5 mm (mean/max over 8 samples x 5 tools):
+  0.2mm 0.03%/0.3% | 2.5mm 0.01%/0.08% | 1cm 0.02%/0.2% | 2cm 0.37%/4.5% |
+  2.5cm 0.46%/7.5% | 5cm 1.35%/21% | 20cm 10%/90%. Repeatability at 2cm and
+  20cm: bit-identical across runs. Warm cost: 10 ms (20cm) -> 0.74 s (5mm) ->
+  213 s (0.2mm) per sample.
+- Gallery figures updated with the 0.2mm curve (invisible under default —
+  the point). Plateau spans 2.5mm..1cm; production 5mm sits in the middle.
