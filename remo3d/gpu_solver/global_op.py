@@ -186,8 +186,27 @@ def _node_indices(z_nodes, coords, tol=1e-6):
     return j
 
 
+def _node_frac(z_nodes, coords):
+    """Bracketing node index and linear weight for arbitrary coordinates.
+
+    Weights are snapped so that on-node points return alpha == 0 exactly
+    (float noise otherwise yields alpha ~ 1 with the PREVIOUS node as base,
+    which corrupts the scalar fid+alpha dedup key: fid granularity is the
+    radial cell, not the z row).
+    """
+    z = np.asarray(z_nodes)
+    c = np.asarray(coords, dtype=float)
+    j = np.clip(np.searchsorted(z, c, side="right") - 1, 0, len(z) - 2)
+    a = np.clip((c - z[j]) / (z[j + 1] - z[j]), 0.0, 1.0)
+    hi = a > 1.0 - 1e-6
+    j = np.where(hi, np.minimum(j + 1, len(z) - 2), j)
+    a = np.where(hi | (a < 1e-6), 0.0, a)
+    return j, a
+
+
 def build_global_tasks(tools, depths, formation, borehole, h_min=None,
-                       domain_radius=None, growth=1.15, fine_margin=0.5):
+                       domain_radius=None, growth=1.15, fine_margin=0.5,
+                       interp_electrodes=False):
     """Sample-independent part of the global problem: grid + task indexing.
 
     The grid depends only on (tools, depths) — canonical radial nodes and the
@@ -225,23 +244,49 @@ def build_global_tasks(tools, depths, formation, borehole, h_min=None,
     fid[1:-1, :-1] = np.arange((nz - 2) * (nr - 1)).reshape(nz - 2, nr - 1)
 
     tasks = {}
-    for t, c in cfgs.items():
-        zs = depths + c["depth_shift"]
-        j_src = _node_indices(z_nodes, zs)
-        j_M = _node_indices(z_nodes, zs + c["dz_M"])
-        j_N = _node_indices(z_nodes, zs + c["dz_N"])
-        tasks[t] = {
-            "src": fid[j_src, 0], "M": fid[j_M, 0], "N": fid[j_N, 0],
-            "K": c["K"],
-        }
-        assert (tasks[t]["src"] >= 0).all()
+    if interp_electrodes:
+        # Electrodes may fall BETWEEN nodes (coarse grids, e.g. h=0.2 m):
+        # the source is split linearly over the two bracketing nodes and
+        # U(M)/U(N) are read by linear interpolation — an APPROXIMATION in
+        # the spirit of the CPU pipeline's batching offset, for resolution
+        # studies only (the default exact-node path raises instead).
+        for t, c in cfgs.items():
+            zs = depths + c["depth_shift"]
+            j_s, a_s = _node_frac(z_nodes, zs)
+            j_m, a_m = _node_frac(z_nodes, zs + c["dz_M"])
+            j_n, a_n = _node_frac(z_nodes, zs + c["dz_N"])
+            assert (j_s >= 1).all() and (j_s + 1 <= nz - 2).all()
+            tasks[t] = {"src": fid[j_s, 0], "src_a": a_s,
+                        "M": fid[j_m, 0], "M_a": a_m,
+                        "N": fid[j_n, 0], "N_a": a_n, "K": c["K"]}
+        keys = np.concatenate(
+            [tk["src"] + np.round(tk["src_a"], 6) for tk in tasks.values()])
+        uniq_keys, inv = np.unique(np.round(keys, 6), return_inverse=True)
+        uniq_src = (np.floor(uniq_keys + 1e-9)).astype(np.int64)
+        uniq_alpha = uniq_keys - uniq_src
+        ofs = 0
+        for tk in tasks.values():
+            tk["col"] = inv[ofs:ofs + len(depths)]
+            ofs += len(depths)
+    else:
+        uniq_alpha = None
+        for t, c in cfgs.items():
+            zs = depths + c["depth_shift"]
+            j_src = _node_indices(z_nodes, zs)
+            j_M = _node_indices(z_nodes, zs + c["dz_M"])
+            j_N = _node_indices(z_nodes, zs + c["dz_N"])
+            tasks[t] = {
+                "src": fid[j_src, 0], "M": fid[j_M, 0], "N": fid[j_N, 0],
+                "K": c["K"],
+            }
+            assert (tasks[t]["src"] >= 0).all()
 
-    all_src = np.concatenate([tk["src"] for tk in tasks.values()])
-    uniq_src, inv = np.unique(all_src, return_inverse=True)
-    ofs = 0
-    for tk in tasks.values():
-        tk["col"] = inv[ofs:ofs + len(depths)]
-        ofs += len(depths)
+        all_src = np.concatenate([tk["src"] for tk in tasks.values()])
+        uniq_src, inv = np.unique(all_src, return_inverse=True)
+        ofs = 0
+        for tk in tasks.values():
+            tk["col"] = inv[ofs:ofs + len(depths)]
+            ofs += len(depths)
 
     # Reciprocity accounting (E3): solving from the measuring electrodes
     # instead would need one column per unique M/N node.
@@ -254,7 +299,8 @@ def build_global_tasks(tools, depths, formation, borehole, h_min=None,
         "h_min": float(h_min), "domain_radius": float(domain_radius),
         "bandwidth": nr - 1,
         "tasks": tasks, "n_free": int((nz - 2) * (nr - 1)),
-        "uniq_src": uniq_src, "n_tasks": int(len(tools) * len(depths)),
+        "uniq_src": uniq_src, "uniq_alpha": uniq_alpha,
+        "n_tasks": int(len(tools) * len(depths)),
         "n_src_recip": int(len(uniq_recip)),
     }
 

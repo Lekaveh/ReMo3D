@@ -210,12 +210,21 @@ def make_solver(problem, precision="mixed", mud="log", n_refine=3,
     k_full = -(-k // k_pad_to) * k_pad_to
     rows = uniq // m                     # free z-row of each source (axis i=0)
     cols = np.arange(k)
+    alpha = problem.get("uniq_alpha")
     b_axis = np.zeros((problem["n_free"] // m, k_full))
-    b_axis[rows, cols] = 1.0             # padded tail columns stay zero
+    if alpha is None:
+        b_axis[rows, cols] = 1.0         # padded tail columns stay zero
+        z_src = problem["z_nodes"][rows + 1]
+    else:
+        # off-node sources (interp_electrodes): current split linearly over
+        # the two bracketing axis nodes
+        b_axis[rows, cols] = 1.0 - alpha
+        b_axis[rows + 1, cols] += alpha
+        z_src = ((1 - alpha) * problem["z_nodes"][rows + 1]
+                 + alpha * problem["z_nodes"][rows + 2])
     b_axis = jnp.asarray(b_axis, dtype)  # scaled per sample, then cast
     # simulation depth of each source column (mud="cpu": one scalar RM each);
     # padded tail repeats the first z (their b columns are zero anyway)
-    z_src = problem["z_nodes"][rows + 1]
     z_src = jnp.asarray(np.pad(z_src, (0, k_full - k), mode="edge"), dtype)
 
     def blocks(Tr, Tz):
@@ -365,8 +374,15 @@ def extract_logs(problem, X0):
         logs = {}
         for t in problem["tools"]:
             tk = problem["tasks"][t]
-            dU = (X0[b, tk["M"] // m, tk["col"]]
-                  - X0[b, tk["N"] // m, tk["col"]])
+            if "M_a" in tk:              # off-node probes: linear interp
+                uM = ((1 - tk["M_a"]) * X0[b, tk["M"] // m, tk["col"]]
+                      + tk["M_a"] * X0[b, tk["M"] // m + 1, tk["col"]])
+                uN = ((1 - tk["N_a"]) * X0[b, tk["N"] // m, tk["col"]]
+                      + tk["N_a"] * X0[b, tk["N"] // m + 1, tk["col"]])
+                dU = uM - uN
+            else:
+                dU = (X0[b, tk["M"] // m, tk["col"]]
+                      - X0[b, tk["N"] // m, tk["col"]])
             logs[t] = tk["K"] * np.abs(dU)
         out.append(logs)
     return out

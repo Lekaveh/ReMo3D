@@ -212,3 +212,12 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   (0.05 m lattice) must be grid nodes; A0.4's 0.1 m M-N gap < cell.
 - Boundary samples (s24/48/66): A8.0 16-20% @R40 -> 2-7% @R720; mud samples
   (s45/56/86/98): R-insensitive 5-13%.
+
+## [2026-07-18] update | v2 h=0.2 m added (interp_electrodes) + gallery updated
+- global_op/global_gpu: interp_electrodes=True — electrodes may fall between
+  nodes (source split over bracketing nodes, probes linearly interpolated);
+  anchor test on the exact lattice: 9e-8. Fixed a dedup-key bug (alpha~1 from
+  float noise bled into the next RADIAL fid; snap alpha->0 with node advance).
+- v2 at h=0.2 m (grid 49x268, 13k DOF): vs default 5 mm — mean 10%, max 90%;
+  A0.4 mean 25% (M-N gap 0.1 m sits inside one cell). Green curve added to all
+  8 gallery figures; resolution ladder now 2.5mm/5mm/5cm/0.2m.
