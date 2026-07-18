@@ -221,3 +221,9 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - v2 at h=0.2 m (grid 49x268, 13k DOF): vs default 5 mm — mean 10%, max 90%;
   A0.4 mean 25% (M-N gap 0.1 m sits inside one cell). Green curve added to all
   8 gallery figures; resolution ladder now 2.5mm/5mm/5cm/0.2m.
+
+## [2026-07-18] query | h-ladder series: NG R=160 + v2 {5mm,1cm,2cm,2.5cm,5cm}
+- New coarsening runs: 1cm mean 0.02% / max 0.2% (still converged!), 2cm
+  0.37%/4.5% (interp electrodes), 2.5cm 0.46%/7.5%; 2cm run twice ->
+  bit-identical (0.00e+00) — GPU path deterministic.
+- Figures raw/assets/hladder-s{0,24,45,48,56,66,86,98}.png.

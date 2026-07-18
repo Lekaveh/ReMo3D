@@ -290,7 +290,20 @@ def make_solver(problem, precision="mixed", mud="log", n_refine=3,
         c32 = c_pad_s.astype(sol_dtype)
 
         if mud == "log":
-            X0 = _solve_scan(Ls, c32, b_axis_s)
+            kc = int(chunk_cols) if chunk_cols else k_full
+            n_chunks = -(-k_full // kc)
+            if n_chunks == 1:
+                X0 = _solve_scan(Ls, c32, b_axis_s)
+            else:
+                # bound the forward-sweep stack on very tall grids
+                # (e.g. h=0.2 mm: 177k rows); lax.map keeps chunks serial
+                pad = n_chunks * kc - k_full
+                b_p = jnp.pad(b_axis_s, ((0, 0), (0, pad)))
+                out = jax.lax.map(
+                    lambda b_sl: _solve_scan(Ls, c32, b_sl),
+                    jnp.stack(jnp.split(b_p, n_chunks, axis=1)))
+                X0 = out.transpose(1, 0, 2).reshape(
+                    b_p.shape[0], n_chunks * kc)[:, :k_full]
             return X0 * s[:, :1].astype(sol_dtype)
 
         # mud="cpu": A(nu) ~ A_ref + dA, dA = dnu*A1 + dnu^2*A2 (nonzero on
