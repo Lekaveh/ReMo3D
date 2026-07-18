@@ -204,3 +204,11 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
 - s66: max |NG-v2| 18.6% (R=40) -> 1.6% (R=720) — full convergence onto v2.
 - s24 (conductive, RM~0.3): 20.4% -> plateau ~6.5% max / 1.6% mean — the
   R-independent remainder is the mud convention (removed by compat mode).
+
+## [2026-07-18] query | Full R-sweep gallery (8 samples x 5 tools) + v2 h-sweep
+- 5120 NGSolve solves (24-proc pool, 32 min): figures rsweep-all-s*.png.
+- v2 grid parameter exposed: h=2.5mm vs default 5mm -> 0.01%/0.08% (converged);
+  h=5cm (10x coarser) -> 1.35%/21% (cliff). 0.2 m step impossible: electrodes
+  (0.05 m lattice) must be grid nodes; A0.4's 0.1 m M-N gap < cell.
+- Boundary samples (s24/48/66): A8.0 16-20% @R40 -> 2-7% @R720; mud samples
+  (s45/56/86/98): R-insensitive 5-13%.
