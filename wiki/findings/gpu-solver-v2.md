@@ -220,6 +220,15 @@ is the regression gate to test against, replacing the stored pipeline logs
 User requirement: v2 must reproduce the CPU pipeline's numbers; where it
 can't, provide an imitation mode without giving up the speed class.
 
+![CPU: 640 per-depth windows, each with the whole borehole at one constant RM, close u=0 boundary — vs GPU v2: one global problem, true RM(z) mud profile, 531 RHS on one factorization, far boundary](../raw/assets/cpu-vs-gpu-mud.svg)
+
+*The mud-convention picture. CPU (left): each of the 640 solves interpolates
+the RM log at ONE point (the tool depth: `remo3d.py:912`) and floods the
+whole borehole with that constant (`gmsh_functions.py:200` — one σ entry
+for the single mud region); the dashed u=0 boundary sits at R=40. v2
+(right): one global problem, every cell sees the RM of its own depth, all
+tasks are RHS columns of one factorization, boundary at R=720.*
+
 **Design.** The scalar-mud-per-depth convention makes the operator
 depth-dependent — fatal for factor-once *naively*. But face conductances are
 LINEAR in the mud conductivity ν=1/RM for pure-mud cells, so

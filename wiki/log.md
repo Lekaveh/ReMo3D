@@ -191,3 +191,8 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   discretization floor). Long-tool boundary effect confirmed point-by-point
   (A8.0 s66 z=13: CPU 1.772@R40 -> 2.180@R720 vs v2 2.178).
 - pages touched: findings/gpu-solver-v2.md (closing cross-validation).
+
+## [2026-07-18] update | Mud-convention diagram added
+- raw/assets/cpu-vs-gpu-mud.svg: CPU per-depth constant-mud windows (R=40)
+  vs the v2 global problem (true RM(z) profile, 531 RHS, R=720), with both
+  pipelines and timings; embedded in findings/gpu-solver-v2.md (compat section).
