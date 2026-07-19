@@ -240,3 +240,17 @@ Append-only, chronological. Newest at the bottom. Entry kinds: `scaffold`,
   213 s (0.2mm) per sample.
 - Gallery figures updated with the 0.2mm curve (invisible under default —
   the point). Plateau spans 2.5mm..1cm; production 5mm sits in the middle.
+
+## [2026-07-19] finding | full/ 1000-sample bench — total arbitration of large deviations
+- Native v2 on 1000 random full/ samples (256 depths, invasion): 1.63
+  s/sample warm B=8; mean 1.73% vs stored b5/R40 refs, >10% at 0.82% of
+  points (98% A8.0).
+- All 430 worst points re-solved with fresh unbatched NGSolve (R=40 +
+  R=160/320): v2 mean 3.4% from converged, stored refs 15.1% (max 93.6%).
+  Six mechanisms, all ref-side or conventions; zero genuine v2 errors.
+- New sub-finding: production gmsh mesh under-resolves high-contrast
+  invasion tori (elements 0.3-0.55 m vs 0.2 m rings); p4 + far-factor 0.1
+  converges FEM to v2 (0.1-0.4%). The 158% "worst case" was the refs'
+  batch_size=5 artifact; R=40 mesh accidents give p-stable 30-58% errors
+  keyed to z_sim.
+- pages touched: findings/gpu-solver-v2.md, index.md.

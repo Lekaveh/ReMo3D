@@ -3,7 +3,7 @@ title: "GPU solver v2 — Phase 0: global factor-once/solve-many is viable"
 type: finding
 tags: [gpu, solver, sparse-direct, block-thomas, amortization, accuracy, mud]
 sources: [deep-research-gpu-solver, repo-docs]
-updated: 2026-07-17
+updated: 2026-07-19
 ---
 
 # GPU solver v2 — Phase 0 results (E0–E3)
@@ -318,6 +318,64 @@ integrated, and the fp64 regression baseline recomputed**. Remaining:
 fresh-NGSolve matched-convention subset for the record, 3rd-GPU sharding
 when the card frees up, and the strategic G7 follow-on (adjoint solves on
 the same factorization → Fréchet kernels for sensitivity/DOI/inversion).
+
+## full/ benchmark: 1000 samples, every large deviation arbitrated (2026-07-18/19)
+
+The `benchmark_data/full/` dataset (28,830 samples: large_noise /
+smooth_noise / unphysical_noise, 256 depths 0–51 m, invasion zones in
+~20–80% of layers) stores NGSolve pipeline logs at **batch_size=5,
+domain_radius=40**. Native v2 (mixed, R=720, physical RM(z)) on 1000
+seeded-random samples (`gpu_v2_full_bench.py`, seed 42):
+
+- **Runtime:** 1.63 s/sample warm (A6000, B=8); B=4 → 3.01 s/sample; the
+  full 1000 in 23 min on two GPUs. CPU pipeline b=5 at this problem size
+  ≈ 24 s/sample → ×15 per GPU.
+- **vs stored refs:** overall mean 1.73% / median 1.19%; >10% at 0.82% of
+  the 1.28 M points, 98.1% of which are A8.0.
+
+**Total arbitration** (`gpu_v2_full_arbitration_all.py`): all 195 non-A8.0
+points >10%, all 190 A8.0 points >25%, plus a stratified A8.0 sample —
+430 points recomputed with fresh unbatched NGSolve at R=40 (the refs' own
+convention) and a converged control (R=160/320). Verdict at these worst
+points: **v2 mean 3.4% (median 1.4%) from the converged reference; the
+stored refs mean 15.1%, max 93.6%.** Every deviation attributed:
+
+| mechanism | points | worst | proof |
+|---|--:|--:|---|
+| refs' R=40 boundary truncation (A8.0) | 10,314 | −52% | fresh R=40 = stored; R≥160 → v2 |
+| R=40 effects on A4.0 (truncation+mesh) | 82 | ~15% | same signature (R=40 is 8.9×span) |
+| mud convention RM(z) vs scalar | 88 | 20% | compat lands on scalar-mud FEM <3% at all 88 |
+| refs' FEM under-resolution at invasion tori | 15 | ~15% | see below |
+| refs' batch_size=5 artifact | 7 | **158%** | fresh unbatched same-convention = v2 (0.2%) |
+| R=40 gmsh geometry accident (short tools) | 3 | 58% | p3/p4-stable, R≥80 → v2; keyed to z_sim, not tool |
+
+Zero points remained where v2 disagrees with a converged reference — the
+"max 158%" (A2.0, sample_331 z=33.2: stored 9.88, v2 25.52, fresh
+unbatched R=40 NGSolve 25.47) is the *reference's* batching error.
+
+**The FEM under-resolution sub-finding** (`gpu_v2_1135_probe.py` + probes):
+thin invaded rings (0.2 m thick, r_inv 0.2–0.5 m, R_xo/Rt contrast up to
+120×) are meshed with ~0.3–0.55 m elements — the production mesh-size
+fields (`gmsh_functions.py:516`) refine only near the *current* electrode,
+never at M/N or material contrasts. At such points the whole FEM stack
+(stored refs + fresh arbiters at every R) shares the same coarse answer,
+while p4 + `REMO3D_FAR_MESH_FACTOR=0.1` converges monotonically **to v2**
+(0.1–0.4% at A2.0/A4.0); v2 itself is h-converged (h/2, subsample ×2 →
+<0.5% movement). At extreme invasion contrasts v2 is *more* accurate than
+the reference pipeline's production mesh.
+
+Related trap for short tools: the R=40 mesh build can settle on a stably
+wrong solution (30–58% off, immune to p-refinement, shared by every tool
+whose current electrode lands on the same z_sim) that disappears at R≥80 —
+a geometry/meshing accident of the truncated domain, not physics.
+
+Practical: (1) treat `full/` stored logs near sharp contrasts + invasion
+with caution (three ref-side defect classes: batching ≤158%, coarse mesh
+≤15%, R=40 truncation ≤52% on A8.0); (2) future matched-convention NGSolve
+checks on contrast-rich models need `REMO3D_FAR_MESH_FACTOR<1` and p4.
+Artifacts: `benchmark_data/gpu_solver/full_v2_native_n1000_seed42.npz`,
+`full_arbitration_all.npz`, `full_v2err_compat_split.npz`,
+`full_worst_arbitration.npz`.
 
 ## Links
 
